@@ -127,6 +127,26 @@
 
 module generic_COBALT
 
+! GPU do-concurrent locality switch (Marshall Ward's MOM6 pattern).
+! DO_LOCALITY(X) emits the F2018 locality spec X only if the compiler supports it
+! (define -DHAVE_FC_DO_CONCURRENT_LOCAL); otherwise it is a no-op (bare do concurrent).
+! CPU vs GPU is chosen by the compile flag (-stdpar=gpu => offload), NOT by this macro.
+#ifdef HAVE_FC_DO_CONCURRENT_LOCAL
+#define DO_LOCALITY(X) X
+#else
+#define DO_LOCALITY(X) ;
+#endif
+
+! Block-directive switch for branch-free point-local BGC loops (same loop body, pick at build time).
+! Expands to the OpenACC/OpenMP offload directive, or nothing for a plain CPU loop.
+#if defined(COBALT_GPU_ACC)
+#define COBALT_GPU_LOOP3 !$acc parallel loop gang vector collapse(3)
+#elif defined(COBALT_GPU_OMP)
+#define COBALT_GPU_LOOP3 !$omp target teams distribute parallel do collapse(3)
+#else
+#define COBALT_GPU_LOOP3
+#endif
+
   use coupler_types_mod, only: coupler_2d_bc_type
   use field_manager_mod, only: fm_string_len
   use mpp_mod,           only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
@@ -3107,7 +3127,7 @@ contains
     real, dimension(ilb:,jlb:), optional, intent(in) :: photo_acc_dpth
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_update_from_source'
-    integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau, i, j, k , m, n, k_100, k_200, kmld_ref
+    integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau, i, j, k , m, n, k_100, k_200, kmld_ref, iresrep_
     real, dimension(:,:,:) ,pointer :: grid_tmask
     integer, dimension(:,:),pointer :: mask_coast,grid_kmt
     !
@@ -3726,17 +3746,11 @@ contains
     !
     ! Do the same for the limitation on light saturated photosynthesis in the mixed layer
     !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-         cobalt%f_irr_aclm(i,j,k) = (cobalt%f_irr_aclm(i,j,k) + (cobalt%irr_aclm_inst(i,j,k) - &
-           cobalt%f_irr_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
-
-         do n = 1,NUM_PHYTO
-           phyto(n)%f_pcmlim_aclm(i,j,k) = (phyto(n)%f_pcmlim_aclm(i,j,k) + (phyto(n)%pcmlim_aclm_inst(i,j,k) - &
-             phyto(n)%f_pcmlim_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
-         enddo
-
-    enddo; enddo ; enddo !} i,j,k
-
+    ! NOTE: the photoacclimation relaxation (former "Loop A") has been FUSED into the
+    ! Geider growth do concurrent below (docon A+B, matching Niki's docon1.2.2). It is
+    ! point-local in (i,j,k) and its outputs (f_irr_aclm, f_pcmlim_aclm) are consumed by
+    ! the growth code at the SAME cell, so fusing is exact. The nh3 block below is
+    ! independent of these and is left in place (runs before the fused loop).
 
     ! This needs to be moved!
     !nh3
@@ -3761,7 +3775,40 @@ contains
     ! Moore and Chisholm: https://doi.org/10.4319/lo.1999.44.3.0628
     ! Stock et al. (submitted) (link to be added as soon as available)
     !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+! ==== GPU offload mechanism switch (same loop body; pick one at build time) ====
+! stdpar/do concurrent (default), OpenACC (-DCOBALT_GPU_ACC), OpenMP-target (-DCOBALT_GPU_OMP).
+! Identical (k,j,i) parallel space + identical private temporaries -> isolates the mechanism.
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) &
+    !$acc   private(n,m,bresp_temp,mu_opt,alpha_step,alpha_temp,P_C_max_step,P_C_max_temp,P_C_m_aclm,P_C_m,theta_temp,irrlim_temp,mu_temp)
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec   !{ A+B fused (OpenACC variant)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   private(n,m,bresp_temp,mu_opt,alpha_step,alpha_temp,P_C_max_step,P_C_max_temp,P_C_m_aclm,P_C_m,theta_temp,irrlim_temp,mu_temp)
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec   !{ A+B fused (OpenMP-target variant)
+#elif defined(COBALT_GPU_ACC_RESIDENT)
+    ! DATA-RESIDENCY CEILING: repeat the loop 20x within one call. On GH200 mem:unified,
+    ! rep 1 migrates the arrays to the GPU; reps 2-20 find them resident (host doesn't touch
+    ! them between reps) -> run at kernel speed, no migration. Lets us measure the resident
+    ! cost vs the per-call migration. (Timing experiment; results not correctness-valid.)
+    do iresrep_ = 1, 20
+    !$acc parallel loop gang vector collapse(3) &
+    !$acc   private(n,m,bresp_temp,mu_opt,alpha_step,alpha_temp,P_C_max_step,P_C_max_temp,P_C_m_aclm,P_C_m,theta_temp,irrlim_temp,mu_temp)
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec   !{ A+B fused (ACC residency-ceiling variant)
+#else
+    do concurrent (k=1:nk, j=jsc:jec, i=isc:iec) &
+        DO_LOCALITY(local(n, m, bresp_temp, mu_opt, alpha_step, alpha_temp, P_C_max_step, P_C_max_temp, P_C_m_aclm, P_C_m, theta_temp, irrlim_temp, mu_temp))   !{ A+B fused (do concurrent / stdpar; Niki docon1.2.2)
+#endif
+
+       ! --- former Loop A: photoacclimation relaxation (fused in; point-local, consumed below) ---
+       cobalt%f_irr_aclm(i,j,k) = (cobalt%f_irr_aclm(i,j,k) + (cobalt%irr_aclm_inst(i,j,k) - &
+         cobalt%f_irr_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
+       do n = 1,NUM_PHYTO
+         phyto(n)%f_pcmlim_aclm(i,j,k) = (phyto(n)%f_pcmlim_aclm(i,j,k) + (phyto(n)%pcmlim_aclm_inst(i,j,k) - &
+           phyto(n)%f_pcmlim_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
+       enddo
+
+       ! --- former Loop B: Geider phytoplankton growth ---
        cobalt%f_chl(i,j,k) = 0.0
 
       ! calculate temperature dependence for all phytoplankton
@@ -3827,7 +3874,14 @@ contains
 
        enddo !} n
 
-    enddo;  enddo ; enddo !} i,j,k
+#if defined(COBALT_GPU_ACC_RESIDENT)
+    enddo ; enddo ; enddo  !} i,j,k
+    enddo                  !} iresrep_ repeat (residency ceiling)
+#elif defined(COBALT_GPU_ACC) || defined(COBALT_GPU_OMP)
+    enddo ; enddo ; enddo !} i,j,k (OpenACC/OpenMP variant)
+#else
+    enddo !} i,j,k (do concurrent / stdpar)
+#endif
 
     !
     ! Calculate the time averaged growth rate (generally over 24 hours)
@@ -3857,6 +3911,11 @@ contains
     !
     ! Uptake of nitrate and ammonia
     !
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) private(n)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) private(n)
+#endif
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        n = DIAZO
        phyto(n)%juptake_n2(i,j,k) =  max(0.0,(1.0 - phyto(n)%no3lim(i,j,k) - phyto(n)%nh4lim(i,j,k))* &
@@ -3894,6 +3953,11 @@ contains
     !
     ! Phosphorous uptake
     !
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) private(n)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) private(n)
+#endif
     do k = 1, nk  ;    do j = jsc, jec ;      do i = isc, iec   !{
        n=DIAZO
        phyto(n)%juptake_po4(i,j,k) = (phyto(n)%juptake_n2(i,j,k)+phyto(n)%juptake_nh4(i,j,k) + &
@@ -3918,6 +3982,11 @@ contains
     !
     ! Iron uptake
     !
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) private(n)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) private(n)
+#endif
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        do n = 1, NUM_PHYTO  !{
           ! Take up iron if below maximum guota and day averaged growth is positive
@@ -3939,6 +4008,7 @@ contains
     !
     ! Silicate uptake
     !
+    COBALT_GPU_LOOP3
     do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec   !{
 	   ! Diatoms are modeled as the fraction of the medium and large phytoplankton based on silica limitation
        cobalt%nlg_diatoms(i,j,k)=phyto(LARGE)%f_n(i,j,k)*phyto(LARGE)%silim(i,j,k)
@@ -3976,6 +4046,7 @@ contains
     ! Anammox converts NH4+ to N2 using NO3- in low O2 environments.
     ! This was not included in ESM4.1 and gamma_nh4amx is currently 0.0
     ! by default.
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
 
        if (cobalt%f_o2(i,j,k) .lt. cobalt%o2_max_amx) then !{
@@ -4003,6 +4074,7 @@ contains
     !  ammonia (NH3).  Scheme 1 is from COBALTv1.  Note that the acclimation irradiance, which reflects
     !  the irradiance during daylight hours, has been used to impose nitrification photoinhibition.
     !
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        cobalt%juptake_nh4nitrif(i,j,k) = 0.0
        if (scheme_nitrif .eq. 2 .or. scheme_nitrif .eq. 3) then
@@ -4037,6 +4109,11 @@ contains
     ! back calculate an effective maximum ldon uptake rate (at 0 deg. C) for bacteria, i.e.:
     ! mu_max = gge_max*vmax - bresp; so (vmax = mu_max+bresp)/gge_max
     vmax_bact = (1.0/bact(1)%gge_max)*(bact(1)%mu_max + bact(1)%bresp)
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) private(bact_uptake_ratio)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) private(bact_uptake_ratio)
+#endif
     do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec   !{
        !
        ! Calculate the growth rate of heterotrophic bacteria (bact%mu)
@@ -4195,6 +4272,17 @@ contains
     ! Main loop for calculating predation by zooplankton and higher predators
     !
 
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) &
+    !$acc   private(m,n,food1,food2,sw_fac_denom,tot_prey_hp) &
+    !$acc   firstprivate(prey_vec,prey_p2n_vec,prey_fe2n_vec,prey_si2n_vec,ipa_matrix,pa_matrix, &
+    !$acc   ingest_matrix,tot_prey,hp_ipa_vec,hp_pa_vec,hp_ingest_vec)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   private(m,n,food1,food2,sw_fac_denom,tot_prey_hp) &
+    !$omp   firstprivate(prey_vec,prey_p2n_vec,prey_fe2n_vec,prey_si2n_vec,ipa_matrix,pa_matrix, &
+    !$omp   ingest_matrix,tot_prey,hp_ipa_vec,hp_pa_vec,hp_ingest_vec)
+#endif
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec; !{
 
        !
@@ -4474,6 +4562,11 @@ contains
 
     call mpp_clock_begin(id_clock_other_losses)
 
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) private(n,growth_ratio)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) private(n,growth_ratio)
+#endif
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec; !{
 
        ! 3.2.1 Calculate losses of phytoplankton to aggregation and mortality and the rate of direct sinking.
@@ -4616,6 +4709,11 @@ contains
     !
 
     call mpp_clock_begin(id_clock_production_loop)
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) private(m,assim_eff)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) private(m,assim_eff)
+#endif
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
 
        ! 3.3.1: Production of detritus and dissolved organic matter
@@ -4834,6 +4932,7 @@ contains
     ! 4.1: Determine the aragonite and calcite saturation states and the production of calcite and aragonite detritus
     !
     ! Calculate the aragonite and calcite saturation states
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
       cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(cobalt%omega_arag(i,j,k),epsln)
       cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(cobalt%omega_calc(i,j,k),epsln)
@@ -4844,6 +4943,7 @@ contains
     ! respect to calcite and aragonite and rates associated with the production of detritus from organisms that form
     ! calcite or aragonite shells.  The overall scalings are controlled by the parameters ca_2_n_arag and ca_2_n_calc.
     ! The saturation state dependence is capped with the parameter caco3_sat_max.
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
         ! Pteropods are assumed to be the primary aragonite shell formers.  Pteropods fall into the medium and large
         ! zooplankton groups within COBALT.  Production of aragonite detritus is thus linked to the consumption of
@@ -4912,6 +5012,7 @@ contains
     ! constant is phi_lith.  Large phytoplankton and diazotrophs are assumed to be solely consumed by filter feeding
     ! copepods.  The proportion of medium and small phytoplankton subject to filter feeding is assumed proportional to
     ! the relative prey availability of small and medium phytoplankton to copepods versus small zooplankton.
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        cobalt%jprod_lithdet(i,j,k)=( cobalt%total_filter_feeding(i,j,k)/ &
                                    ( phyto(LARGE)%f_n(i,j,k) + phyto(DIAZO)%f_n(i,j,k) + &
@@ -4929,6 +5030,7 @@ contains
     !
     ! Note: Dissolution of aragonite and calcite detritus has been observed under supersaturating conditions. This
     ! process will be added in a future COBALT update.
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        cobalt%jdiss_cadet_arag(i,j,k) = cobalt%gamma_cadet_arag * &
          max(0.0, 1.0 - cobalt%omega_arag(i,j,k)) * cobalt%f_cadet_arag(i,j,k)
@@ -4975,6 +5077,7 @@ contains
     ! Klaas and Archer, 2002: https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2001GB001765
     ! Dunne et al., 2005: https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2004GB002390
     !
+    COBALT_GPU_LOOP3
     do k=1,nk ; do j=jsc,jec ; do i=isc,iec  !{
        cobalt%expkreminT(i,j,k) = exp(cobalt%kappa_remin * Temp(i,j,k))
        ! Calculate remineralization under aerobic remineralization
@@ -5073,6 +5176,11 @@ contains
     ! Fan et al. (2008): https://www.sciencedirect.com/science/article/pii/S030442030800008X
     ! Liu and Millero (2002): https://www.sciencedirect.com/science/article/pii/S030442030800008X
     !
+#if defined(COBALT_GPU_ACC)
+    !$acc parallel loop gang vector collapse(3) private(feprime_temp,fe_salt)
+#elif defined(COBALT_GPU_OMP)
+    !$omp target teams distribute parallel do collapse(3) private(feprime_temp,fe_salt)
+#endif
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        ! Calculate the equilibrium ligand binding strength and a function of light
        cobalt%kfe_eq_lig(i,j,k) = min(cobalt%kfe_eq_lig_ll, 10.0**( log10(cobalt%kfe_eq_lig_hl) + &
@@ -5533,6 +5641,7 @@ contains
     allocate(pre_totfe(isc:iec,jsc:jec,1:nk))
     allocate(net_srcfe(isc:iec,jsc:jec,1:nk))
     allocate(pre_totsi(isc:iec,jsc:jec,1:nk))
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
          pre_totn(i,j,k) = (cobalt%p_no3(i,j,k,tau) + cobalt%p_nh4(i,j,k,tau) + &
                     cobalt%p_ndi(i,j,k,tau) + cobalt%p_nlg(i,j,k,tau) + &
@@ -5586,6 +5695,7 @@ contains
     !     Phytoplankton Nitrogen and Phosphorus
     !
     call mpp_clock_begin(id_clock_source_sink_loop2)
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Diazotrophic Phytoplankton Nitrogen
@@ -5664,6 +5774,7 @@ contains
     !     Phytoplankton Silicon and Iron
     !
     call mpp_clock_begin(id_clock_source_sink_loop3)
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Large Phytoplankton Silicon
@@ -5730,6 +5841,7 @@ contains
     !    Zooplankton
     !
     call mpp_clock_begin(id_clock_source_sink_loop4)
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Small zooplankton
@@ -5756,6 +5868,7 @@ contains
     !     NO3
     !
     call mpp_clock_begin(id_clock_source_sink_loop5)
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        cobalt%jno3(i,j,k) =  cobalt%jprod_no3nitrif(i,j,k) - phyto(DIAZO)%juptake_no3(i,j,k) - &
                              phyto(LARGE)%juptake_no3(i,j,k) - phyto(MEDIUM)%juptake_no3(i,j,k) - &
@@ -5768,6 +5881,7 @@ contains
     !
     !     Other nutrients
     !
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! NH4
@@ -5796,6 +5910,7 @@ contains
        cobalt%p_sio4(i,j,k,tau) = cobalt%p_sio4(i,j,k,tau) + cobalt%jsio4(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
 
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Fed
@@ -5814,6 +5929,7 @@ contains
     !-----------------------------------------------------------------------
     !
     call mpp_clock_begin(id_clock_source_sink_loop6)
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Cadet_arag
@@ -5857,6 +5973,7 @@ contains
        cobalt%p_sidet(i,j,k,tau) = cobalt%p_sidet(i,j,k,tau) + cobalt%jsidet(i,j,k)*dt*grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
 
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Fedet
@@ -5870,6 +5987,7 @@ contains
     !
     !     Dissolved Organic Matter
     !
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Labile Dissolved Organic Nitrogen
@@ -5917,6 +6035,7 @@ contains
     !
     !     O2
     !
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j =jsc, jec ; do i = isc, iec  !{
        cobalt%jo2(i,j,k) = (cobalt%o2_2_no3 * (phyto(DIAZO)%juptake_no3(i,j,k) +   &
             phyto(LARGE)%juptake_no3(i,j,k) + phyto(MEDIUM)%juptake_no3(i,j,k) + &
@@ -5931,6 +6050,7 @@ contains
     !
     !     The Carbon system
     !
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Alkalinity
@@ -6056,6 +6176,7 @@ contains
     !     Lithogenic aluminosilicate particulates
     !-----------------------------------------------------------------------
     !
+    COBALT_GPU_LOOP3
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        cobalt%p_lith(i,j,k,tau) = cobalt%p_lith(i,j,k,tau) - cobalt%jlithdet(i,j,k) * dt *        &
             grid_tmask(i,j,k)
