@@ -3116,6 +3116,11 @@ contains
     !------------------------------------------------------------------------
     !
     logical :: used, first
+    logical, save :: cobalt_gpu_mapped = .false.  ! GPU port: map the resident device set ONCE (MOM6 "map at init" pattern)
+    integer, parameter :: MAX_SW_BANDS = 16        ! GPU port: bound for fixed-size local() band-work array (nbands<=this)
+    real :: sfc_irr_l                              ! GPU port: per-column surface PAR (block B local, was sfc_irrad array)
+    real :: tmp_irr_band_l(MAX_SW_BANDS)           ! GPU port: per-column band irradiance carrier (block B local())
+    real :: tmp_pcmlim_ML(NUM_PHYTO)               ! GPU port: per-column ML pcmlim accum (replaces phyto%tmp_pcmlim_aclm_ML, was a RACE)
     integer :: nb
     real :: r_dt
     real :: feprime_temp
@@ -3474,7 +3479,37 @@ contains
     !
     ! Calculate iron cell quota
     !
-    do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec
+    ! === GPU §1.1 (do concurrent + persistent OpenMP-target residency, mem:separate; MOM6 pattern) ===
+    ! Map the resident device set ONCE (first call) -- per-call enter/exit data caused a derived-type
+    ! attach/detach storm that stalled at scale. Thereafter only `target update` (bulk copies, no
+    ! re-attach) bridges host<->device; the do concurrent carries NO map clause (relies on residency).
+    ! NOTE: §1.1's two triple-loops are fused into one do concurrent (loop2 reads loop1 outputs at the
+    ! same (i,j,k), satisfied within the iteration body); n and k_po4_adjust auto-privatized by stdpar.
+    if (.not. cobalt_gpu_mapped) then
+      !$omp target enter data map(to: cobalt)
+      !$omp target enter data map(to: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4,cobalt%f_fed)
+      ! §1.2 blocks C/E/F/G inputs/outputs + MOM6 fields that live on the device:
+      !$omp target enter data map(to: cobalt%irr_inst,cobalt%irr_aclm_inst,cobalt%f_irr_aclm,cobalt%expkT, &
+      !$omp   cobalt%f_chl,cobalt%mld_aclm)
+      ! block B (light field) outputs/state on device:
+      !$omp target enter data map(to: cobalt%irr_mix,cobalt%f_irr_aclm_z,cobalt%f_irr_aclm_sfc,cobalt%daylength)
+      !$omp target enter data map(to: phyto)
+      do n = 1,NUM_PHYTO
+        !$omp target enter data map(to: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p, &
+        !$omp   phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n,phyto(n)%no3lim,phyto(n)%nh4lim, &
+        !$omp   phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim,phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim)
+        !$omp target enter data map(to: phyto(n)%pcmlim_aclm_inst,phyto(n)%f_pcmlim_aclm,phyto(n)%irrlim, &
+        !$omp   phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu,phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl, &
+        !$omp   phyto(n)%jprod_n,phyto(n)%mu_mix,phyto(n)%f_mu_mem)
+      enddo
+      cobalt_gpu_mapped = .true.
+    endif
+    ! refresh §1.1 inputs (changed on host by transport / prior sections) onto the device
+    !$omp target update to(cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4,cobalt%f_fed)
+    do n = 1,NUM_PHYTO
+      !$omp target update to(phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
+    enddo
+    do concurrent (k=1:nk, j=jsc:jec, i=isc:iec)
        do n = 1,NUM_PHYTO    !{
           phyto(n)%q_fe_2_n(i,j,k) = max(0.0, phyto(n)%f_fe(i,j,k)/ &
                  max(epsln,phyto(n)%f_n(i,j,k)))
@@ -3517,11 +3552,9 @@ contains
           phyto(n)%def_fe(i,j,k) = phyto(n)%q_fe_2_n(i,j,k)**2.0 / (phyto(n)%k_fe_2_n**2.0 +  &
                phyto(n)%q_fe_2_n(i,j,k)**2.0)
        enddo !} n
-    enddo;  enddo ;  enddo !} i,j,k
-    !
-    ! Calculate nutrient limitation based on the most limiting nutrient (liebig_lim)
-    !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       !
+       ! Calculate nutrient limitation based on the most limiting nutrient (liebig_lim)
+       !
        n=DIAZO
        phyto(n)%liebig_lim(i,j,k) = phyto(n)%o2lim(i,j,k)* &
           min(phyto(n)%po4lim(i,j,k), max(phyto(n)%def_fe(i,j,k),phyto(n)%felim(i,j,k)))
@@ -3529,7 +3562,13 @@ contains
           phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k),&
              phyto(n)%po4lim(i,j,k), max(phyto(n)%def_fe(i,j,k),phyto(n)%felim(i,j,k)))
        enddo !} n
-    enddo;  enddo ;  enddo !} i,j,k
+    enddo !} i,j,k  (fused do concurrent, offloaded by -stdpar=gpu)
+    ! bring §1.1 outputs back for the (still CPU) downstream sections §1.2-§6
+    do n = 1,NUM_PHYTO
+      !$omp target update from(phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n,phyto(n)%no3lim, &
+      !$omp   phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim,phyto(n)%felim,phyto(n)%def_fe, &
+      !$omp   phyto(n)%liebig_lim)
+    enddo
     !
     !-----------------------------------------------------------------------
     ! 1.2: Light Limitation/Growth Calculations
@@ -3592,81 +3631,75 @@ contains
     ! Forsythe et al.: https://www.sciencedirect.com/science/article/pii/030438009400034F
     ! Stock et al. (submitted) (link to be added as soon as available)
     !
-    allocate(tmp_irr_band(nbands))        ! irradiance in wavelength bands
-    allocate(sfc_irrad(isc:iec,jsc:jec))  ! surface photosythetically available irradiance
     allocate(kblt(isc:iec,jsc:jec))       ! tracks of max k index in mixed layer
     frac_sfc_irrad_aclm = 1.0/(2.71828**cobalt%ml_aclm_efold) ! controls acclimation in deep mixed layers
-    do j = jsc, jec ; do i = isc, iec   !{
+    ! Column-independent daylength geometry (depends only on model_time): hoist to host, off the GPU loop.
+    yearday = day_of_year(model_time)
+    rev_angle = 0.2163108 + 2.0*atan(0.9671396*tan(0.00860*(real(yearday,8) - 186.0)))
+    dec_angle = asin(0.39795*cos(rev_angle))
+    if (nbands > MAX_SW_BANDS) call mpp_error(FATAL, 'generic_COBALT GPU: nbands exceeds MAX_SW_BANDS')
+    ! === GPU resident region START (block B onward): stage block-A output + MOM6 dummy-arg arrays per-call ===
+    ! relaxation state (f_irr_aclm_z/_sfc) resident & evolves on device; kblt device-only; liebig_lim resident from §1.1.
+    !$omp target update to(cobalt%mld_aclm)
+    !$omp target enter data map(to: Temp)
+    !$omp target enter data map(to: Salt)
+    !$omp target enter data map(to: dzt)
+    !$omp target enter data map(to: zmid)
+    !$omp target enter data map(to: grid_tmask)
+    !$omp target enter data map(to: geolat)
+    !$omp target enter data map(to: sw_pen_band)
+    !$omp target enter data map(to: opacity_band)
+    !$omp target enter data map(to: max_wavelength_band)
+    !$omp target enter data map(alloc: kblt)
+    ! -- block B: underwater light field (per-band attenuation k-recurrence; (i,j) parallel, k sequential) --
+    do concurrent (j=jsc:jec, i=isc:iec) local(tmp_irr_band_l,tmp_pcmlim_ML,sfc_irr_l,tmp_irrad,tmp_opacity, &
+                   tmp_irrad_ML,tmp_hblt,tmp_irrad_aclm,tmp_zaclm,irrad_aclm_thresh,temp_arg,nb,n,k)
 
-       ! Calculate photosynthetically available radiation at air-sea interface (sfc_irrad)
-       sfc_irrad(i,j) = 0.0
+       ! Calculate photosynthetically available radiation at air-sea interface
+       sfc_irr_l = 0.0
        do nb=1,nbands !{
           if (max_wavelength_band(nb) .lt. 710.0) then !{
-             tmp_irr_band(nb) = cobalt%par_adj*sw_pen_band(nb,i,j)
-             sfc_irrad(i,j) = sfc_irrad(i,j) + cobalt%par_adj*sw_pen_band(nb,i,j)
+             tmp_irr_band_l(nb) = cobalt%par_adj*sw_pen_band(nb,i,j)
+             sfc_irr_l = sfc_irr_l + cobalt%par_adj*sw_pen_band(nb,i,j)
           else
-             tmp_irr_band(nb) = 0.0
+             tmp_irr_band_l(nb) = 0.0
           endif !}
        enddo !}
 
-       ! calculate the day length (cobalt%daylength(i,j) based on the CBM daylength model
-       ! rev_angle = revolution angle (eq. (1) of Forsythe et al.)
-       ! dec_angle = sun's declination angle (eq. (2) of Forsythe et al.)
-       ! daylength (in hours)
-       yearday = day_of_year(model_time)
-       rev_angle = 0.2163108 + 2.0*atan(0.9671396*tan(0.00860*(real(yearday,8) - 186.0)))
-       dec_angle = asin(0.39795*cos(rev_angle))
+       ! daylength (CBM model; rev_angle/dec_angle hoisted above -- depend only on model_time)
        temp_arg = (sin(12.0*3.14/180.0)+sin(geolat(i,j)*3.14/180.0)*sin(dec_angle)) / &
                       (cos(geolat(i,j)*3.14/180.0)*cos(dec_angle))
        ! bound to be -1 (complete darkness) or 1 (complete day)
        temp_arg = max(min(temp_arg,1.0),-1.0)
        cobalt%daylength(i,j) = 24.0 - 24.0/3.14*acos(temp_arg)
 
-       ! Calculate the acclimation irradiance at the surface.  This basic equation relaxes
-       ! the irradiance toward the current value with a an inverse time scale set by gamma:
-       !
-       ! I_aclm(t+1) = I_aclm(t) + (I*(24/daylength)-I_aclm(t))*gamma*dt
-       !
-       ! multiplication by 24/daylength adjusts the irradiance averaged over 24 hours to
-       ! upward to approximate the irradiance during daylight hours. For photoacclimation
-       ! the default relaxation timescale is set to 1 day (gamma = 1/86400 sec), and
-       ! "dt" is the time step.
+       ! Acclimation irradiance at the surface (relaxation toward current value)
        cobalt%f_irr_aclm_sfc(i,j,1) = (cobalt%f_irr_aclm_sfc(i,j,1) + &
-         (sfc_irrad(i,j)*24.0/max(cobalt%daylength(i,j),cobalt%min_daylength)-cobalt%f_irr_aclm_sfc(i,j,1)) * &
+         (sfc_irr_l*24.0/max(cobalt%daylength(i,j),cobalt%min_daylength)-cobalt%f_irr_aclm_sfc(i,j,1)) * &
          min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,1)
 
-       !
-       ! Calculate the subsurface and irradiance fields
-       !
-       kblt(i,j) = 0         ! saves the max k index within the mixed layer
-       tmp_irrad_ML = 0.0    ! integrates the irradiance in the mixed layer
-       tmp_hblt = 0.0        ! tracks depth of the top of the current layer for mld calcs
-       tmp_irrad_aclm = 0.0  ! integrates the irradiance in the surface photoacclimation layer
-       tmp_zaclm = 0.0       ! tracks depth of top of the curent layer photoacclimation layer calcs
+       kblt(i,j) = 0
+       tmp_irrad_ML = 0.0
+       tmp_hblt = 0.0
+       tmp_irrad_aclm = 0.0
+       tmp_zaclm = 0.0
        do n = 1,NUM_PHYTO
-         ! Tracks the temp*nutrient limitation of light-saturated photosynthesis in the mixed layer
-         phyto(n)%tmp_pcmlim_aclm_ML = 0.0
+         tmp_pcmlim_ML(n) = 0.0
        enddo
-       ! Define the irradiance threshold for a "deep" mixed layer for photoacclimation
        irrad_aclm_thresh = frac_sfc_irrad_aclm*cobalt%f_irr_aclm_sfc(i,j,1)
        do k = 1, nk !{
           tmp_irrad = 0.0
           ! Sum up the irradiance in all bands at the k level
           do nb=1,nbands !{
-
-             ! Issue: This code currently includes an option to increase opacity in shallow/fresh
-             ! water.  This should be moved to a namelist (and eventually replaced with a more
-             ! robust coastal optics model with full feedbacks to the physics)
+             ! optional opacity increase in shallow/fresh (case-2) water
              if ((zmid(i,j,nk).le.cobalt%case2_depth).or.(Salt(i,j,k).le.cobalt%case2_salt)) then
                tmp_opacity = opacity_band(nb,i,j,k) + cobalt%case2_opac_add
              else
                tmp_opacity = opacity_band(nb,i,j,k)
              endif
-
-             ! Calculate the irradiance at the mid-point of the grid cell
-             tmp_irrad = tmp_irrad + max(0.0,tmp_irr_band(nb) * exp(-tmp_opacity * dzt(i,j,k) * 0.5))
-             ! Calculate the irradiance at the bottom of the grid cell in preparation for the next k
-             tmp_irr_band(nb) = tmp_irr_band(nb) * exp(-tmp_opacity * dzt(i,j,k))
+             ! mid-cell irradiance, then attenuate to cell bottom for the next k (column recurrence)
+             tmp_irrad = tmp_irrad + max(0.0,tmp_irr_band_l(nb) * exp(-tmp_opacity * dzt(i,j,k) * 0.5))
+             tmp_irr_band_l(nb) = tmp_irr_band_l(nb) * exp(-tmp_opacity * dzt(i,j,k))
           enddo !}
 
           cobalt%irr_inst(i,j,k) = tmp_irrad * grid_tmask(i,j,k)
@@ -3676,27 +3709,20 @@ contains
             phyto(n)%pcmlim_aclm_inst(i,j,k) = phyto(n)%liebig_lim(i,j,k)*exp(cobalt%kappa_eppley*Temp(i,j,k))
           enddo
 
-          ! Issue: evaluate what it would take to remove this variable
           cobalt%irr_mix(i,j,k) = tmp_irrad * grid_tmask(i,j,k)
 
-          ! This acclimation irradiance variables saves the full depth structure (even in the mixed layer)
-          ! We need it to determine when a mixed layer is "deep" for purposes of photoacclimation
           cobalt%f_irr_aclm_z(i,j,k) = (cobalt%f_irr_aclm_z(i,j,k) + &
                   (cobalt%irr_inst(i,j,k)*24.0/max(cobalt%daylength(i,j),cobalt%min_daylength) - &
                   cobalt%f_irr_aclm_z(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
 
-          ! calculate the integrated light in the mixed layer and in the integrated light and depth of
-          ! the acclimation layer.  These are equal for shallow mixed layers but can depart for deeper layers
+          ! integrate light/limitation over the mixed layer (kblt counts ML levels for this column)
           if ( (k == 1) .or. (tmp_hblt .lt. cobalt%mld_aclm(i,j)) ) then
              kblt(i,j) = kblt(i,j)+1
              tmp_irrad_ML = tmp_irrad_ML + cobalt%irr_inst(i,j,k) * dzt(i,j,k)
              tmp_hblt = tmp_hblt + dzt(i,j,k)
-
-             ! integrate the limitation on light limited growth in the mixed layer
              do n = 1,NUM_PHYTO
-                phyto(n)%tmp_pcmlim_aclm_ML = phyto(n)%tmp_pcmlim_aclm_ML+phyto(n)%pcmlim_aclm_inst(i,j,k)*dzt(i,j,k)
+                tmp_pcmlim_ML(n) = tmp_pcmlim_ML(n)+phyto(n)%pcmlim_aclm_inst(i,j,k)*dzt(i,j,k)
              enddo
-
              if (cobalt%f_irr_aclm_z(i,j,k) .ge. irrad_aclm_thresh) then
                 tmp_irrad_aclm = tmp_irrad_aclm + cobalt%irr_inst(i,j,k) * dzt(i,j,k)
                 tmp_zaclm = tmp_zaclm + dzt(i,j,k)
@@ -3705,28 +3731,28 @@ contains
 
        enddo !} k-loop
 
-       ! Phytoplankton in the surface mixed layer (1:kblt) aclimate to the mean daytime
-       ! light level over the photoacclimation layer: (tmp_irrad_aclm/tmp_zaclm)*24/daylength
-       cobalt%irr_aclm_inst(i,j,1:kblt(i,j)) = tmp_irrad_aclm/max(1.0e-6,tmp_zaclm)*24.0/ &
-                                               max(cobalt%daylength(i,j),cobalt%min_daylength)
-
-       ! calculate the average limitation on light saturated photosynthesis in the mixed layer
-       do n = 1,NUM_PHYTO
-         phyto(n)%pcmlim_aclm_inst(i,j,1:kblt(i,j)) = phyto(n)%tmp_pcmlim_aclm_ML / max(1.0e-6,tmp_hblt)
+       ! Mixed-layer (1:kblt) photoacclimation averages -- section-writes -> bounded inner k-loops for stdpar
+       do k = 1, kblt(i,j)
+          cobalt%irr_aclm_inst(i,j,k) = tmp_irrad_aclm/max(1.0e-6,tmp_zaclm)*24.0/ &
+                                        max(cobalt%daylength(i,j),cobalt%min_daylength)
        enddo
-
-       ! Issue: what would it take to remove irr_mix?
-       cobalt%irr_mix(i,j,1:kblt(i,j)) = tmp_irrad_ML / max(1.0e-6,tmp_hblt)
-    enddo;  enddo !} i,j
-
-    deallocate(tmp_irr_band)
+       do n = 1,NUM_PHYTO
+         do k = 1, kblt(i,j)
+           phyto(n)%pcmlim_aclm_inst(i,j,k) = tmp_pcmlim_ML(n) / max(1.0e-6,tmp_hblt)
+         enddo
+       enddo
+       do k = 1, kblt(i,j)
+         cobalt%irr_mix(i,j,k) = tmp_irrad_ML / max(1.0e-6,tmp_hblt)
+       enddo
+    enddo !} block B (do concurrent, (i,j) parallel, k sequential)
     !
     ! Calculate the final photoacclimation irradiance using the standard relaxation
     ! scheme (I_aclm(t+1) = I_aclm(t) + (I*(24/daylength)-I_aclm(t))*gamma*dt).
     !
     ! Do the same for the limitation on light saturated photosynthesis in the mixed layer
     !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+    ! -- block C: photoacclimation relaxation (resident; B produced irr_aclm_inst/pcmlim_aclm_inst on device) --
+    do concurrent (k=1:nk, j=jsc:jec, i=isc:iec)
          cobalt%f_irr_aclm(i,j,k) = (cobalt%f_irr_aclm(i,j,k) + (cobalt%irr_aclm_inst(i,j,k) - &
            cobalt%f_irr_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
 
@@ -3735,7 +3761,7 @@ contains
              phyto(n)%f_pcmlim_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
          enddo
 
-    enddo; enddo ; enddo !} i,j,k
+    enddo !} block C (do concurrent)
 
 
     ! This needs to be moved!
@@ -3761,7 +3787,8 @@ contains
     ! Moore and Chisholm: https://doi.org/10.4319/lo.1999.44.3.0628
     ! Stock et al. (submitted) (link to be added as soon as available)
     !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+    ! -- block E: Geider growth ecotype loop (resident; inputs staged at region start) --
+    do concurrent (k=1:nk, j=jsc:jec, i=isc:iec)
        cobalt%f_chl(i,j,k) = 0.0
 
       ! calculate temperature dependence for all phytoplankton
@@ -3827,7 +3854,7 @@ contains
 
        enddo !} n
 
-    enddo;  enddo ; enddo !} i,j,k
+    enddo !} i,j,k  (do concurrent block E)
 
     !
     ! Calculate the time averaged growth rate (generally over 24 hours)
@@ -3835,7 +3862,8 @@ contains
     ! control sinking and aggregation.  First loop provides average growth
     ! in the mixed layer.  The second averages over all depths.
     !
-    do j = jsc, jec ; do i = isc, iec ; do n = 1,NUM_PHYTO !{
+    ! -- block F: mixed-layer-average growth rate (k-accumulation; (i,j,n) parallel, k sequential) --
+    do concurrent (j=jsc:jec, i=isc:iec, n=1:NUM_PHYTO) local(tmp_mu_ML,tmp_hblt,k)
        tmp_mu_ML = 0.0 ; tmp_hblt = 0.0
        do k = 1, nk !{
           if ((k == 1) .or. (tmp_hblt .lt. cobalt%mld_aclm(i,j))) then !{
@@ -3843,13 +3871,35 @@ contains
              tmp_hblt = tmp_hblt + dzt(i,j,k)
           endif !}
        enddo !} k-loop
-       phyto(n)%mu_mix(i,j,1:kblt(i,j)) = tmp_mu_ML / max(epsln,tmp_hblt)
-    enddo;  enddo; enddo !} i,j,n
+       ! mu_mix(i,j,1:kblt) = mean over mixed layer (section-write -> bounded inner k-loop for stdpar)
+       do k = 1, kblt(i,j)
+          phyto(n)%mu_mix(i,j,k) = tmp_mu_ML / max(epsln,tmp_hblt)
+       enddo
+    enddo !} block F (do concurrent)
 
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec; do n = 1,NUM_PHYTO !{
+    ! -- block G: growth-memory relaxation --
+    do concurrent (k=1:nk, j=jsc:jec, i=isc:iec, n=1:NUM_PHYTO)
        phyto(n)%f_mu_mem(i,j,k) = phyto(n)%f_mu_mem(i,j,k) + (phyto(n)%mu_mix(i,j,k) - &
              phyto(n)%f_mu_mem(i,j,k))*min(1.0,cobalt%gamma_mu_mem*dt)*grid_tmask(i,j,k)
-    enddo; enddo ; enddo; enddo !} i,j,k,n
+    enddo !} block G (do concurrent)
+    ! === end resident region (block B..G): bring device-written §1.2 outputs back for the (CPU) §1.3-§6 + diagnostics ===
+    !$omp target update from(cobalt%f_irr_aclm,cobalt%expkT,cobalt%f_chl,cobalt%irr_inst,cobalt%irr_aclm_inst, &
+    !$omp   cobalt%irr_mix,cobalt%f_irr_aclm_z,cobalt%f_irr_aclm_sfc,cobalt%daylength)
+    do n = 1,NUM_PHYTO
+      !$omp target update from(phyto(n)%f_pcmlim_aclm,phyto(n)%pcmlim_aclm_inst,phyto(n)%mu,phyto(n)%mu_mix, &
+      !$omp   phyto(n)%jprod_n,phyto(n)%chl,phyto(n)%theta,phyto(n)%irrlim,phyto(n)%bresp,phyto(n)%P_C_max, &
+      !$omp   phyto(n)%alpha,phyto(n)%f_mu_mem)
+    enddo
+    !$omp target exit data map(delete: kblt)
+    !$omp target exit data map(delete: max_wavelength_band)
+    !$omp target exit data map(delete: opacity_band)
+    !$omp target exit data map(delete: sw_pen_band)
+    !$omp target exit data map(delete: geolat)
+    !$omp target exit data map(delete: zmid)
+    !$omp target exit data map(delete: grid_tmask)
+    !$omp target exit data map(delete: dzt)
+    !$omp target exit data map(delete: Salt)
+    !$omp target exit data map(delete: Temp)
 
     !-----------------------------------------------------------------------
     ! 1.3: Nutrient uptake calculations
