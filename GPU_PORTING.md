@@ -20,14 +20,32 @@ tracked ledger of what changed, why, and what it bought — section by section, 
 - **Memory model:** `-gpu=cc90,mem:separate` (no managed/unified auto-migration) — matches the dycore.
 - **Reproducibility:** `-Mnofma` (bit-reproducible arithmetic; transcendentals validated by ensemble).
 
-## The baseline (what every b2b compares against)
-- **CPU baseline** = the *same* `generic_COBALT.F90` source, compiled **CPU-only** with the production
-  reproducibility flags (`-O0 -Mnovect -Mnofma -i4 -r8 -byteswapio`), run on the **pinned test case**.
-- **GPU build** = the *same* source + GPU flags (`-stdpar=gpu -mp=gpu -gpu=cc90,mem:separate`) scoped to
-  `generic_COBALT.o`, run on the **same** test case, **same** step count.
-- **Pinned test case (current):** `OM4.scale128.COBALT` (128×128×75 = 1.23 M cells), `input.nml_min`
-  (DT override → 6 COBALT calls), empty `diag_table`, single PE.
-- Each section PR **pins the baseline commit + test case + step count** so the comparison is reproducible.
+## The baseline — TWO pinned cases (correctness vs speed are separated)
+Both builds are the *same source*, no-MPI, single-PE, differing only in how `generic_COBALT.o` is compiled:
+- **CPU build** (`nvhpc-x86-cpu-nompi`): `generic_COBALT.o` CPU-only (`do concurrent`→serial, `!$omp target` ignored), `-O0 -Mnovect -Mnofma -i4 -r8 -byteswapio`. 0 MPI / 0 CUDA symbols.
+- **GPU build** (`nvhpc-x86-sep-nompi`): `generic_COBALT.o` + `-stdpar=gpu -mp=gpu -gpu=cc90,mem:separate`.
+
+### Case A — b2b / correctness: `OM4.single_column.COBALT` (4×4×75, DT=900, `input.nml_48hr`)
+A CI-validated coarse case, **stable for 48 hr = 2 full diurnal cycles** (exercises every COBALT branch:
+photoacclimation, daylength, mixed-layer averaging). Runs in **~32 s**. Correctness is grid-size-independent
+(COBALT is pointwise/columnar), so this validates the *same kernels* as the full grid.
+- **CPU reference (saved in `ref_cpu_48hr/`):** restart `MOM.res.nc` + tracer inventory totals —
+  `dic 1.5036917227507502e13 · alk 1.6266596681460596e13 · no3 1.1316286936109605e11 ·
+  po4 7.5339372143624897e9 · o2 1.6808066162606292e12`.
+- **Round-off band (10-member ensemble, `KD·(1+k·1e-13)`):** rel-range **dic 3.9e-16 · alk 4.8e-16 ·
+  no3 2.7e-16 · po4 6.3e-16 · o2 1.0e-15** → noise floor **~1e-15 (last 1–2 ULP)**.
+- **b2b PASS criterion:** GPU tracer totals within **~1e-15 relative** of the CPU reference (≈15–16 sig figs).
+  exp-block last-ULP differences land inside this band → validated as round-off; anything outside = a bug.
+
+### Case B — speed / profiling: `OM4.scale128.COBALT` (128×128×75, DT=120, **12 steps**)
+Realistic problem size for occupancy/roofline. **Speed-only** — this IC is a ~12-min smoke test and goes
+free-surface-unstable (SSH→195 m) beyond ~2 hr at *any* DT, so it must **not** be used for b2b.
+- **Speed record (no-MPI, H100 NVL, 12 steps):** `Cobalt: phytoplankton growth` (the ported §1.1+§1.2)
+  **CPU 72.3 s → GPU 21.9 s = 3.3×**; total runtime 619 s → 579 s (Amdahl — growth is the only ported part).
+  carbon-calcs 40.6≈40.1 s confirms it's still CPU. NOTE: the 21.9 s GPU growth clock is mostly host/transfer
+  overhead — the block-E kernel is ~54 ms — so residency/transfer reduction is the next frontier.
+
+Each section PR **pins the baseline commit + both test cases + step counts** so the comparison is reproducible.
 
 ## The per-section optimization loop
 Run for **every** section, iterating until it hits its roofline / occupancy ceiling:
