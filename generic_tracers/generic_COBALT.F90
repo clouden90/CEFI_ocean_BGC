@@ -3484,8 +3484,10 @@ contains
       !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
       !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim)
     enddo
-    !$omp target teams loop collapse(3) private(n,k_po4_adjust)
-    do k=1,nk ; do j=jsc,jec ; do i=isc,iec
+    ! Compute via ISO-standard do concurrent (-stdpar=gpu). PROFILED EQUIVALENT to
+    ! `omp target teams loop collapse(3)` and `target teams distribute parallel do` on nvfortran 24.11
+    ! (identical grid 9600, occupancy 43.7%, 72 regs, 8.0 ms) -> chosen for portability. See GPU_PORTING.md.
+    do concurrent (k=1:nk, j=jsc:jec, i=isc:iec) local(n,k_po4_adjust)
        do n = 1,NUM_PHYTO    !{
           phyto(n)%q_fe_2_n(i,j,k) = max(0.0, phyto(n)%f_fe(i,j,k)/ &
                  max(epsln,phyto(n)%f_n(i,j,k)))
@@ -3538,7 +3540,7 @@ contains
           phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k),&
              phyto(n)%po4lim(i,j,k), max(phyto(n)%def_fe(i,j,k),phyto(n)%felim(i,j,k)))
        enddo !} n
-    enddo ; enddo ; enddo  !} i,j,k  (GPU §1.1: omp target teams loop collapse(3))
+    end do  !} i,j,k  (GPU §1.1: do concurrent + -stdpar=gpu)
     ! === bring §1.1 outputs back to host (rest of COBALT is CPU on this branch) ===
     do n = 1,NUM_PHYTO
       !$omp target exit data map(from: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
