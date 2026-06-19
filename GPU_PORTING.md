@@ -207,6 +207,21 @@ Run for **every** section, iterating until it hits its roofline / occupancy ceil
 predate this methodology and must be re-run through the loop from the clean baseline. Remaining big
 targets: carbon chemistry / CO₂-pH solver (#1 CPU cost), zooplankton, production, remineralization.*
 
+## Deferred optimizations (backlog — revisit by profile, not by default)
+Levers we identified but **intentionally deferred** (rule: optimize the *measured* bottleneck, not the
+interesting one). Recorded here so they survive context/`/scratch5` purges. Revisit only when the trigger fires.
+
+| section | deferred lever | evidence (tool) | expected payoff | priority / revisit trigger |
+|---|---|---|---|---|
+| §1.2a Geider | registers 130→~64 (`launch_bounds` / `maxregcount` / split the ecotype `m`-loop) to lift the **18.75% register-capped occupancy** | ncu: occ register-capped; latency-bound (warp-cyc/inst ~15.5, DRAM ~0%) | **modest** — Geider is only ~3% of the GPU growth timer now (~0.2 s) | **LOW** — only if Geider re-surfaces as the bottleneck after §1.2b; watch for register **spills** (cuobjdump) |
+| §1.1 + §1.2a | **residency consolidation** — both still use *per-call* `enter/exit data` (~170 ms/call transfer; ncu DtoH ~155 ms/call dominates) | nsys | **HIGH** | **scheduled** — folds into §1.2b full growth-block residency (map once, copy back once) |
+| growth (all) | **endgame: whole-COBALT residency** — map tracers once/timestep; keep growth outputs on device for the CPU foodweb/chem sections instead of copying back | nsys: output DtoH remains even after block residency | **HIGH** (removes inter-section transfer) | after growth + carbon + zoo are ported |
+| §1.1 | 72-reg → 43.75% occ ceiling, but already 64% SM throughput | ncu: kernel optimal | negligible | none (kernel optimal) |
+
+**Current measured priority (post-§1.2a):** the GPU growth timer (1,925 ms/call) is ~88% the **still-on-CPU
+loops** (A irradiance / E ML-avg / §1.3 uptake), ~9% transfer, ~3% Geider kernel → **§1.2b (port A/E/§1.3 +
+full-block residency) is the high-value next step**, not the Geider register tune.
+
 ---
 
 ## References
