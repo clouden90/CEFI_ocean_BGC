@@ -1,66 +1,107 @@
 # COBALT GPU Porting — Strategy, Methodology & References
 
 This document defines **how** we GPU-port COBALT (`generic_COBALT.F90`) for the CEFI ocean-BGC
-model, aligned with the MOM6 dynamical-core GPU port. It is the reference every porting PR
-follows. The goal is a process where each kernel is **correctness-gated and performance-recorded**,
-so the repo carries a tracked ledger of what was changed, why, and what it bought.
+model, aligned with the MOM6 dynamical-core GPU port. **Every GPU PR follows it.** The goal is a
+process where each section is **correctness-gated and performance-recorded**, so the repo carries a
+tracked ledger of what changed, why, and what it bought — section by section, from a clean baseline.
 
 ## Goals
 - **One maintainable, vendor-portable Fortran source** — CPU and GPU from the same code.
 - **Align with the MOM6 dycore GPU strategy** so the whole coupled model shares one approach.
-- **Every change is correctness-gated (b2b) and performance-recorded (nsys/ncu/cuobjdump).**
+- **Every change is correctness-gated (b2b) and performance-recorded (nsys + ncu, plus cuobjdump).**
+- Build the port up **one validated section at a time** from the clean `feature/gpu` baseline —
+  never bulk-import unvalidated work.
 
 ## The approach (per kernel)
-- **Compute:** standard Fortran `do concurrent` (`-stdpar=gpu`). Where the compiler
-  under-parallelizes a complex loop (see below), use an explicit `!$omp target teams loop collapse(N)`.
+- **Compute:** standard Fortran `do concurrent` (`-stdpar=gpu`). Where the compiler under-parallelizes
+  a complex loop (serializes a dimension), use an explicit `!$omp target teams loop collapse(N)`.
 - **Data residency:** a thin **OpenMP-target** layer — map state once (`!$omp target enter data map(to:)`),
   per-call `target update` only for data crossing the CPU/GPU boundary; compute loops carry **no** map clause.
 - **Memory model:** `-gpu=cc90,mem:separate` (no managed/unified auto-migration) — matches the dycore.
 - **Reproducibility:** `-Mnofma` (bit-reproducible arithmetic; transcendentals validated by ensemble).
 
+## The baseline (what every b2b compares against)
+- **CPU baseline** = the *same* `generic_COBALT.F90` source, compiled **CPU-only** with the production
+  reproducibility flags (`-O0 -Mnovect -Mnofma -i4 -r8 -byteswapio`), run on the **pinned test case**.
+- **GPU build** = the *same* source + GPU flags (`-stdpar=gpu -mp=gpu -gpu=cc90,mem:separate`) scoped to
+  `generic_COBALT.o`, run on the **same** test case, **same** step count.
+- **Pinned test case (current):** `OM4.scale128.COBALT` (128×128×75 = 1.23 M cells), `input.nml_min`
+  (DT override → 6 COBALT calls), empty `diag_table`, single PE.
+- Each section PR **pins the baseline commit + test case + step count** so the comparison is reproducible.
+
 ## The per-section optimization loop
-For each section we iterate until it hits its roofline / occupancy ceiling:
+Run for **every** section, iterating until it hits its roofline / occupancy ceiling:
 
 ```
-  1. PORT (try)        write the kernel; build the no-MPI exe
-  2. b2b GATE ①        restart-diff vs CPU baseline  ── MUST pass before profiling
-  3. PROFILE           nsys (time) · ncu (SOL/occupancy/roofline/regs) · cuobjdump (regs/SASS/spills)
-                       → identify the binding bottleneck
-  4. TUNE              apply the indicated lever (collapse(N), register cap, fusion, tiling, residency)
-  5. b2b GATE ②        re-validate correctness AFTER the tuning change
-  6. PROFILE again     measure the gain; confirm the bottleneck moved
-  7. REPEAT 4–6        until optimized (roofline-bound or diminishing returns)
-  8. PR                record before/after (b2b PASS, nsys/ncu/cuobjdump, verdict) → merge → ledger
+ 1. PORT          lift/write the section kernel; build the no-MPI exe (CPU baseline + GPU build)
+
+ 2. b2b GATE ①    run CPU baseline and GPU on the SAME pinned test case; diff the section outputs
+                    ├─ bit-identical .............. PASS  → record the matching value(s)
+                    └─ NOT bit-identical .......... MANDATORY cuobjdump:
+                         • dump SASS, locate the divergent instruction(s) — MUFU.EX2 (=exp),
+                           MUFU.RCP/div helpers, any FMA — i.e. WHY it differs;
+                         • run the CPU round-off ensemble; GPU value MUST fall inside the band;
+                         • write the explanation in the PR.
+                         A diff NOT explained by transcendental round-off = a BUG → fix before proceeding.
+
+ 3. PROFILE        RECORD all three (these are PR artifacts, not optional):
+                    • nsys  — kernel-time table
+                    • ncu   — SOL (compute/mem %), occupancy (achieved/theoretical), regs/thread, roofline
+                    • cuobjdump — regs, local-memory spills, key SASS
+                    → identify the binding bottleneck
+
+ 4. TUNE           apply the indicated lever: collapse(N) (parallelism), register cap → ~64
+                   (launch_bounds/split), kernel fusion, tiling/JIK ordering, residency fix
+
+ 5. b2b GATE ②     re-run b2b after the tuning change (a perf change can break correctness)
+
+ 6. PROFILE again  RECORD nsys + ncu again; confirm the bottleneck moved / occupancy rose
+
+ 7. REPEAT 4–6     until optimized (roofline/occupancy-bound or diminishing returns)
+
+ 8. PR             open into feature/gpu with the FULL record (see checklist) → review → merge → ledger
 ```
 
-**Hard rule:** no performance change merges without a **passing b2b in the same PR**.
+**Hard rules**
+- No performance change merges without a **passing b2b in the same PR** (PASS = bit-identical, *or*
+  a divergence proven to be transcendental round-off via cuobjdump + ensemble).
+- A section is "done" only when **optimized** (roofline/occupancy-bound), with the final profile recorded.
+- b2b is checked at the **section-output level** (kernels share resident state — you can't bit-check one in isolation).
 
-**b2b definition:** restart-file diff vs the CPU baseline. Pure-arithmetic blocks must be
-**bit-identical**; `exp`/transcendental blocks are validated against a **CPU round-off ensemble**
-(GPU result must fall inside the natural round-off band) — transcendentals are IEEE-permitted to
-differ at the last ULP. b2b is checked at the **section-output level** (kernels share resident state).
+## What every section PR MUST contain (checklist)
+- [ ] **Baseline pinned** — CPU-baseline commit, test case, step count.
+- [ ] **Code** — the section's GPU change (construct + directives), one section per PR.
+- [ ] **b2b result** — one of:
+  - PASS, bit-identical (quote the matching value), **or**
+  - documented round-off: cuobjdump SASS excerpt of the divergent instruction(s) (e.g. `MUFU.EX2`),
+    the CPU round-off ensemble band, the GPU value shown inside it, and a one-line "why it's acceptable."
+- [ ] **nsys** — kernel-time table, **before → after**.
+- [ ] **ncu** — SOL (compute/mem %), achieved/theoretical occupancy, registers/thread, roofline point, **before → after**.
+- [ ] **cuobjdump** — registers, local-memory spills, key SASS (the optimization evidence).
+- [ ] **Tuning analysis** — bottleneck found → lever applied → measured effect → remaining limiter.
+- [ ] **Status tracker updated** (the table below).
 
 ## Profiling infrastructure
 - `ncu` **cannot** profile through the coupled model's HPC-X `mpirun`. We build the whole
-  MOM6SIS2+COBALT model **without MPI** (serial FMS `_nocomm` backend + `nvfortran`/`nvc`,
-  dropping `-Duse_libMPI`), giving a launcher-free `./MOM6SIS2` that `ncu` attaches to directly.
-  This profiles the **real** in-model kernels — a standalone reproduction proved *misleading*
-  (it hid a 5× under-parallelization bug).
-- **Single source of truth:** the build compiles `cefi/src/ocean_BGC`; it must be kept in sync
-  with this repo when iterating.
+  MOM6SIS2+COBALT model **without MPI** (serial FMS `_nocomm` backend + `nvfortran`/`nvc`, dropping
+  `-Duse_libMPI`), giving a launcher-free `./MOM6SIS2` that `ncu` attaches to directly. This profiles
+  the **real** in-model kernels — a standalone reproduction proved *misleading* (it hid a 5×
+  under-parallelization bug).
+- **Single source of truth:** the build compiles `cefi/src/ocean_BGC`; keep it synced with this repo when iterating.
 
 ## Status tracker (living — update each PR)
 | section | line | construct | b2b | profiled (real model) | optimized |
 |---|---|---|---|---|---|
-| §1.1 nutrient lim | 3513 | `do concurrent(k,j,i)` | aggregate | yes — under-parallelized, 6.25% occ | ❌ `collapse(3)` pending |
-| B light attenuation | 3656 | `do concurrent(j,i) local()` | aggregate | yes — 255 regs, local-mem spill | ❌ |
-| C acclimation | 3756 | `do concurrent(k,j,i)` | aggregate | yes — under-parallelized | ❌ `collapse(3)` pending |
+| §1.1 nutrient lim | 3513 | `do concurrent(k,j,i)` | aggregate only | yes — under-parallelized, 6.25% occ | ❌ `collapse(3)` pending |
+| B light attenuation | 3656 | `do concurrent(j,i) local()` | aggregate only | yes — 255 regs, local-mem spill | ❌ |
+| C acclimation | 3756 | `do concurrent(k,j,i)` | aggregate only | yes — under-parallelized | ❌ `collapse(3)` pending |
 | E Geider growth | 3794 | `omp target teams loop collapse(3)` | ⚠️ re-validate after change | yes — 272→54 ms (5×), now reg-bound | ◑ 1 pass |
-| F mixed-layer avg | 3872 | `do concurrent(j,i,n) local()` | aggregate | yes — **#1 kernel, ~97% idle** | ❌ |
-| G growth-memory | 3887 | `do concurrent(k,j,i,n)` | aggregate | partial | ❌ |
+| F mixed-layer avg | 3872 | `do concurrent(j,i,n) local()` | aggregate only | yes — **#1 kernel, ~97% idle** | ❌ |
+| G growth-memory | 3887 | `do concurrent(k,j,i,n)` | aggregate only | partial | ❌ |
 
-*(Ported so far = the growth pathway §1.1+§1.2 ≈ 10% of the 4,000-line reaction network. Remaining
-big targets: carbon chemistry / CO₂-pH solver (#1 CPU cost), zooplankton, production, remineralization.)*
+*Ported so far = the growth pathway §1.1+§1.2 ≈ 10% of the 4,000-line reaction network. All rows above
+predate this methodology and must be re-run through the loop from the clean baseline. Remaining big
+targets: carbon chemistry / CO₂-pH solver (#1 CPU cost), zooplankton, production, remineralization.*
 
 ---
 
