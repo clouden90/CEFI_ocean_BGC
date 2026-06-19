@@ -3474,7 +3474,18 @@ contains
     !
     ! Calculate iron cell quota
     !
-    do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec
+    ! === GPU §1.1: nutrient limitation -- do concurrent + standalone per-call OpenMP-target residency (mem:separate) ===
+    !$omp target enter data map(to: cobalt)
+    !$omp target enter data map(to: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4,cobalt%f_fed)
+    !$omp target enter data map(to: phyto)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
+      !$omp target enter data map(alloc: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
+      !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
+      !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim)
+    enddo
+    !$omp target teams loop collapse(3) private(n,k_po4_adjust)
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec
        do n = 1,NUM_PHYTO    !{
           phyto(n)%q_fe_2_n(i,j,k) = max(0.0, phyto(n)%f_fe(i,j,k)/ &
                  max(epsln,phyto(n)%f_n(i,j,k)))
@@ -3517,11 +3528,9 @@ contains
           phyto(n)%def_fe(i,j,k) = phyto(n)%q_fe_2_n(i,j,k)**2.0 / (phyto(n)%k_fe_2_n**2.0 +  &
                phyto(n)%q_fe_2_n(i,j,k)**2.0)
        enddo !} n
-    enddo;  enddo ;  enddo !} i,j,k
-    !
-    ! Calculate nutrient limitation based on the most limiting nutrient (liebig_lim)
-    !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       !
+       ! Calculate nutrient limitation based on the most limiting nutrient (liebig_lim)
+       !
        n=DIAZO
        phyto(n)%liebig_lim(i,j,k) = phyto(n)%o2lim(i,j,k)* &
           min(phyto(n)%po4lim(i,j,k), max(phyto(n)%def_fe(i,j,k),phyto(n)%felim(i,j,k)))
@@ -3529,7 +3538,16 @@ contains
           phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k),&
              phyto(n)%po4lim(i,j,k), max(phyto(n)%def_fe(i,j,k),phyto(n)%felim(i,j,k)))
        enddo !} n
-    enddo;  enddo ;  enddo !} i,j,k
+    enddo ; enddo ; enddo  !} i,j,k  (GPU §1.1: omp target teams loop collapse(3))
+    ! === bring §1.1 outputs back to host (rest of COBALT is CPU on this branch) ===
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
+      !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
+      !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim)
+      !$omp target exit data map(delete: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
+    enddo
+    !$omp target exit data map(delete: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4,cobalt%f_fed)
+    !$omp target exit data map(delete: cobalt,phyto)
     !
     !-----------------------------------------------------------------------
     ! 1.2: Light Limitation/Growth Calculations
