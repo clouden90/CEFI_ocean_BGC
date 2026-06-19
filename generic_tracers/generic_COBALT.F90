@@ -3484,10 +3484,12 @@ contains
       !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
       !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim)
     enddo
-    ! Compute via ISO-standard do concurrent (-stdpar=gpu). PROFILED EQUIVALENT to
-    ! `omp target teams loop collapse(3)` and `target teams distribute parallel do` on nvfortran 24.11
-    ! (identical grid 9600, occupancy 43.7%, 72 regs, 8.0 ms) -> chosen for portability. See GPU_PORTING.md.
-    do concurrent (k=1:nk, j=jsc:jec, i=isc:iec) local(n,k_po4_adjust)
+    ! Compute via explicit omp target teams loop collapse(3). TEST: bare `do concurrent` here was grid 9600
+    ! in isolation but REGRESSED to grid-75/6.25%-occ once the §1.2 Geider loop was added to the file --
+    ! nvfortran's do-concurrent auto-parallelization is context-sensitive/unreliable; collapse(3) guarantees
+    ! the full 9600-block launch deterministically. See GPU_PORTING.md.
+    !$omp target teams loop collapse(3) private(n,k_po4_adjust)
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec
        do n = 1,NUM_PHYTO    !{
           phyto(n)%q_fe_2_n(i,j,k) = max(0.0, phyto(n)%f_fe(i,j,k)/ &
                  max(epsln,phyto(n)%f_n(i,j,k)))
@@ -3540,7 +3542,7 @@ contains
           phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k),&
              phyto(n)%po4lim(i,j,k), max(phyto(n)%def_fe(i,j,k),phyto(n)%felim(i,j,k)))
        enddo !} n
-    end do  !} i,j,k  (GPU §1.1: do concurrent + -stdpar=gpu)
+    enddo ; enddo ; enddo  !} i,j,k  (GPU §1.1: omp target teams loop collapse(3))
     ! === bring §1.1 outputs back to host (rest of COBALT is CPU on this branch) ===
     do n = 1,NUM_PHYTO
       !$omp target exit data map(from: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
@@ -3781,7 +3783,23 @@ contains
     ! Moore and Chisholm: https://doi.org/10.4319/lo.1999.44.3.0628
     ! Stock et al. (submitted) (link to be added as soon as available)
     !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+    ! === GPU §1.2a (Geider growth -- the dominant compute in the growth block): do concurrent
+    !     + per-kernel OpenMP-target residency (mem:separate). Only this loop is offloaded; the
+    !     columnar irradiance loops (A/E) stay on CPU and bridge via the host-valid inputs mapped
+    !     below. §1.2b will restructure A/E and merge §1.1+§1.2 into one growth-block scope. ===
+    !$omp target enter data map(to: cobalt, phyto, Temp, kblt)
+    !$omp target enter data map(to: cobalt%f_irr_aclm, cobalt%irr_inst)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%f_n, phyto(n)%f_pcmlim_aclm, phyto(n)%liebig_lim)
+      !$omp target enter data map(alloc: phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu, &
+      !$omp&   phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix)
+    enddo
+    !$omp target enter data map(alloc: cobalt%f_chl, cobalt%expkT)
+    ! TUNE (§1.2a profile): bare `do concurrent` under-parallelized this complex body (nvfortran
+    ! collapsed only k -> 75 blocks / 9600 threads / 6.25% occ). Explicit collapse(3) forces all 3 dims.
+    !$omp target teams loop collapse(3) private(n,m,bresp_temp,mu_opt,alpha_step,alpha_temp, &
+    !$omp&   P_C_max_step,P_C_max_temp,P_C_m_aclm,theta_temp,irrlim_temp,mu_temp,P_C_m)
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec
        cobalt%f_chl(i,j,k) = 0.0
 
       ! calculate temperature dependence for all phytoplankton
@@ -3847,7 +3865,15 @@ contains
 
        enddo !} n
 
-    enddo;  enddo ; enddo !} i,j,k
+    enddo ; enddo ; enddo  !} i,j,k  (GPU §1.2a Geider: omp target teams loop collapse(3))
+    ! === bring §1.2a Geider outputs back to host (columnar A/E + downstream are CPU on this branch) ===
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu, &
+      !$omp&   phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix)
+      !$omp target exit data map(delete: phyto(n)%f_n, phyto(n)%f_pcmlim_aclm, phyto(n)%liebig_lim)
+    enddo
+    !$omp target exit data map(from: cobalt%f_chl, cobalt%expkT)
+    !$omp target exit data map(delete: cobalt%f_irr_aclm, cobalt%irr_inst, Temp, kblt, cobalt, phyto)
 
     !
     ! Calculate the time averaged growth rate (generally over 24 hours)

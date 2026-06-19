@@ -13,20 +13,18 @@ tracked ledger of what changed, why, and what it bought — section by section, 
   never bulk-import unvalidated work.
 
 ## The approach (per kernel)
-- **Compute:** standard Fortran `do concurrent (k=…,j=…,i=…)` (`-stdpar=gpu`) — the **multi-index form**.
-  We *measured* (see [Measured findings](#measured-findings--why-we-use-do-concurrent-controlled-11-profiling-study))
-  that on nvfortran 24.11 this compiles to the **same kernel** as `!$omp target teams loop collapse(3)`
-  and `target teams distribute parallel do collapse(3)` — identical grid, occupancy, registers, and time —
-  so we use `do concurrent` for maximum portability (pure ISO Fortran, no compute pragmas). The earlier
-  under-parallelization was **form-specific** (bare/nested `do concurrent`), not inherent; always confirm
-  full parallelization with `ncu` (grid size / occupancy) and fall back to explicit `collapse(N)` only if a
-  given loop actually under-parallelizes.
+- **Compute:** explicit **`!$omp target teams loop collapse(3)`** (portable — macro-wrap to
+  `target teams distribute parallel do collapse(3)` for AMD/Intel). We *measured* (see **Measured findings**
+  below) that bare `do concurrent` auto-parallelization on nvfortran 24.11 is **context-sensitive and
+  unreliable**: it under-parallelizes complex loop bodies, and even silently *regresses* a previously-full
+  loop when unrelated code is added to the same file (§1.1 went grid 9,600→75). `collapse(3)` forces the
+  full launch **deterministically**. Always confirm grid size / occupancy with `ncu`.
 - **Data residency:** a thin **OpenMP-target** layer — map state once (`!$omp target enter data map(to:)`),
   per-call `target update` only for data crossing the CPU/GPU boundary; compute loops carry **no** map clause.
 - **Memory model:** `-gpu=cc90,mem:separate` (no managed/unified auto-migration) — matches the dycore.
 - **Reproducibility:** `-Mnofma` (bit-reproducible arithmetic; transcendentals validated by ensemble).
 
-## Measured findings — why we use `do concurrent` (controlled §1.1 profiling study)
+## Measured findings — why we use explicit `collapse(3)` (controlled profiling A/B)
 We ran a controlled A/B/C on **§1.1** (nutrient limitation): *identical* loop body and *identical* thin
 OpenMP data layer, varying **only** the compute construct, each profiled in the real no-MPI model
 (128×128×75). This is our **own evidence** for the construct choice, not an assumption inherited from
@@ -40,14 +38,48 @@ the literature.
 | `!$omp target teams loop collapse(3)` | 9600×128 (**1.23M**) | 72 | 43.75% | 43.5% | 64.1% | 8.0 ms |
 | `!$omp target teams distribute parallel do collapse(3)` | 9600×128 (**1.23M**) | 72 | 43.75% | 43.5% | 64.1% | 8.0 ms |
 
-On nvfortran 24.11 the multi-index `do concurrent` compiles to the **same kernel** as the explicit OpenMP
-constructs. **Decision: write compute as `do concurrent`** — maximum portability, **zero measured
-performance penalty** — keeping OpenMP solely for data residency.
+In *isolation* the three constructs compile to the same kernel — **but that equivalence is fragile.**
 
-> This **refines** the earlier block-E observation (bare/nested `do concurrent` → 6.25% occupancy, fixed by
-> `collapse(3)`): the under-parallelization is **form-specific**, not inherent to `do concurrent`. The proper
-> multi-index form parallelizes fully. Lesson: **don't assume — confirm grid/occupancy with `ncu`**; use
-> explicit `collapse(N)` only where a specific loop under-parallelizes.
+**§1.2 finding — `do concurrent` is context-sensitive and unreliable (the decision-changer).** When the §1.2
+Geider growth loop was added to the same file and we re-profiled (`ncu`):
+- the **complex Geider body** under-parallelized as bare `do concurrent` (nvfortran collapsed only `k` →
+  **grid 75 / 6.25% occ**, j serialized); and
+- the **§1.1 loop above it silently *regressed*** from its isolated grid 9,600 / 43.7% to **grid 75 / 6.25%**
+  — *same source, only because unrelated code changed in the file*.
+- Explicit **`collapse(3)` restored both deterministically** (§1.1 → grid 9,600 / 43.5%, kernel 80→8 ms; Geider → grid 9,600 / 18.7%).
+
+**Decision (revised): use explicit `!$omp target teams loop collapse(3)`** for the COBALT kernels — `do
+concurrent` auto-parallelization is too compiler-/context-dependent to rely on. Still portable (macro-wrap to
+`target teams distribute parallel do` for AMD/Intel); the OpenMP-target data layer is unchanged.
+
+### §1.2 Geider growth — full `collapse(3)` vs `do concurrent` evaluation (the evidence)
+Geider growth loop (3-D pointwise × phyto × ecotype, `exp`-heavy), 128³, H100. **Provenance:** kernel TIME
+from **`nsys`** (true GPU time); all SOL/occupancy/registers/IPC/warp metrics from **`ncu --set full`**;
+growth wall-clock from the in-model **`mpp_clock`** timer; b2b from the model tracer totals; SASS from **`cuobjdump`**.
+
+| metric (source) | `do concurrent` | `collapse(3)` | winner / why |
+|---|---|---|---|
+| Compute SOL % (ncu) | 6.33% | **31.77%** | cc3 5× — roofline dot moves up toward the compute roof |
+| Memory SOL % / DRAM % (ncu) | 0.48% / 0.03% | 2.43% / 0.17% | both ~0 → **not memory-bound** |
+| L1 / L2 hit % (ncu) | 96 / 96 | 95 / 95 | cached → kernel is **compute/latency-bound** |
+| Grid (ncu) | 75 blocks | **9,600 blocks** | cc3 — fills the 132 SMs |
+| Achieved occupancy (ncu) | 6.25% | **18.74%** (= theoretical) | cc3 3× — balanced launch |
+| Active warps / SM (ncu) | 4.0 | **12.0** | cc3 3× latency-hiding |
+| IPC active / issue-slots (ncu) | 0.26 / 6.4% | **0.75 / 18.9%** | cc3 ~3× useful work/cycle |
+| Warp cycles / inst (ncu) | 15.5 | 15.9 | tie — ~14 cyc on a fixed-latency FP dependency |
+| Registers / thread (ncu) | 144 | 130 | ~tie — **the win is NOT registers** |
+| Geider kernel time (**nsys**) | **272 ms** | **54 ms** | cc3 **5×** |
+| growth timer CPU→GPU (**mpp_clock**) | 73.5 → 27.0 s | 73.5 → **23.1 s = 3.18×** | the outcome |
+| b2b (tracer totals) | within-band PASS | within-band PASS | correctness held |
+
+**Why `collapse(3)` is better (mechanism):** the kernel is **arithmetic-latency-bound** — `ncu` reports
+`Warp Cycles/Inst ≈ 15.5` *"stalled on a fixed-latency execution dependency"* (the `exp`/FP chains), with
+DRAM ~0% and L1/L2 ~95% (so **not** memory-bound). That latency is hidden by **more warps in flight**. Bare
+`do concurrent` launched only 75 blocks → 4 warps/SM → can't hide it (Compute SOL 6%, IPC 0.26). `collapse(3)`
+launches 9,600 blocks → 12 warps/SM → hides it 3× better → Compute SOL 5×, IPC 2.9×, **kernel 5× faster**.
+Per-warp latency and register count are ~unchanged — the win is **occupancy/parallelism**, confirmed on every
+utilization axis with **no metric regressing**. Remaining headroom: occupancy is **register-capped at 18.75%**
+(130 regs) → next lever is registers→~64 via `launch_bounds` / kernel-split.
 
 **Residency axis (`nsys`) — the kernel is not the cost; the per-call transfer is.**
 §1.1 with per-call `enter/exit data` (1-coupling-step run, 2 COBALT calls):
@@ -164,10 +196,10 @@ Run for **every** section, iterating until it hits its roofline / occupancy ceil
 ## Status tracker (living — update each PR)
 | section | line | construct | b2b | profiled (real model) | optimized |
 |---|---|---|---|---|---|
-| §1.1 nutrient lim | 3477 | `do concurrent (k=,j=,i=)` | ✅ bit-identical (0.00e+00 vs ref) | yes — 1.23M threads, 43.7% occ (=theoretical), 64% SM; ≡ omp `loop`/`distribute` | ◑ kernel optimal; **residency** is the lever |
+| §1.1 nutrient lim | 3491 | `omp target teams loop collapse(3)` | ✅ bit-identical (0.00e+00 vs ref) | ncu: grid 9,600 / 43.5% occ / 64% SM / 8 ms (do-concurrent regressed to grid 75 in-context → switched to collapse3) | ◑ kernel optimal |
 | B light attenuation | 3656 | `do concurrent(j,i) local()` | aggregate only | yes — 255 regs, local-mem spill | ❌ |
 | C acclimation | 3756 | `do concurrent(k,j,i)` | aggregate only | yes — under-parallelized | ❌ `collapse(3)` pending |
-| E Geider growth | 3794 | `omp target teams loop collapse(3)` | ⚠️ re-validate after change | yes — 272→54 ms (5×), now reg-bound | ◑ 1 pass |
+| §1.2a Geider growth | 3800 | `omp target teams loop collapse(3)` | ✅ within-band PASS (exp/MUFU.RCP, 2–3e-16) | nsys: 272→54 ms (5×); ncu: grid 9,600 / 18.7% occ / 31.8% SM; growth 73.5→23.1 s (**3.18×**) | ◑ reg-capped 18.75% → launch_bounds/split next |
 | F mixed-layer avg | 3872 | `do concurrent(j,i,n) local()` | aggregate only | yes — **#1 kernel, ~97% idle** | ❌ |
 | G growth-memory | 3887 | `do concurrent(k,j,i,n)` | aggregate only | partial | ❌ |
 
