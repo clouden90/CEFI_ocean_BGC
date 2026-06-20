@@ -3735,6 +3735,15 @@ contains
     !
     ! Do the same for the limitation on light saturated photosynthesis in the mixed layer
     !
+    ! === GPU §1.2b Loop B (f_irr_aclm / f_pcmlim_aclm relaxation): pointwise collapse(3) + own scope.
+    !     Pure arithmetic (RMW relaxation, no transcendentals) -> expected BIT-IDENTICAL to prior GPU.
+    !     f_irr_aclm/f_pcmlim_aclm are RMW accumulators -> mapped to:/from: (carry prior value). ===
+    !$omp target enter data map(to: cobalt, phyto, grid_tmask)
+    !$omp target enter data map(to: cobalt%f_irr_aclm, cobalt%irr_aclm_inst)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%f_pcmlim_aclm, phyto(n)%pcmlim_aclm_inst)
+    enddo
+    !$omp target teams loop collapse(3) private(n)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
          cobalt%f_irr_aclm(i,j,k) = (cobalt%f_irr_aclm(i,j,k) + (cobalt%irr_aclm_inst(i,j,k) - &
            cobalt%f_irr_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
@@ -3744,7 +3753,13 @@ contains
              phyto(n)%f_pcmlim_aclm(i,j,k)) * min(1.0,cobalt%gamma_irr_aclm * dt)) * grid_tmask(i,j,k)
          enddo
 
-    enddo; enddo ; enddo !} i,j,k
+    enddo; enddo ; enddo !} i,j,k  (GPU §1.2b-B)
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%f_pcmlim_aclm)
+      !$omp target exit data map(delete: phyto(n)%pcmlim_aclm_inst)
+    enddo
+    !$omp target exit data map(from: cobalt%f_irr_aclm)
+    !$omp target exit data map(delete: cobalt%irr_aclm_inst, grid_tmask, cobalt, phyto)
 
 
     ! This needs to be moved!
