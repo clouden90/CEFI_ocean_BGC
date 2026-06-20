@@ -231,6 +231,9 @@ Run for **every** section, iterating until it hits its roofline / occupancy ceil
 - [ ] **nsys** — kernel-time table, **before → after**.
 - [ ] **ncu** — SOL (compute/mem %), achieved/theoretical occupancy, registers/thread, roofline point, **before → after**.
 - [ ] **cuobjdump** — registers, local-memory spills, key SASS (the optimization evidence).
+- [ ] **CPU no-regression** — the single source must not hurt the CPU build:
+  - *Tier 1 (every section, free):* the CPU exe's growth timer (already printed by the speed test) within **±5%** of the pre-change value. NOTE this is the `-O0 -Mnovect` reproducibility build → insensitive to restructuring, catches only **gross** regressions. (Our `!$omp target` directives are pure comments on CPU — 0 host-OpenMP symbols — so the construct change is a CPU no-op; real loop *restructuring* is what this guards.)
+  - *Tier 2 (one-time, at the §-block merge — the real test):* build the **original** and the **restructured** source at **`-O2`** and compare the growth timer → certifies the GPU restructure didn't hurt *production* (optimized/vectorized) CPU. `-O2` is **not** bit-identical to the `-O0 -Mnofma` reference (FMA + reassociation legitimately change the last ULP) and we do not require it to be — we only sanity-check the `-O2` result lands **within the round-off band** of the reference (confirms optimization re-rounded, didn't expose a real hazard).
 - [ ] **Tuning analysis** — bottleneck found → lever applied → measured effect → remaining limiter.
 - [ ] **Status tracker updated** (the table below).
 
@@ -252,8 +255,8 @@ Run for **every** section, iterating until it hits its roofline / occupancy ceil
 | §1.3 uptake N/P/Fe/Si | 3924–4009 | 4× `omp target teams loop collapse(3)` | ✅ within-band PASS (Fe `exp`; CPU bit-identical). **Bug caught+fixed:** partial-write outputs were `alloc:` → device garbage (b2b 1e-4 @4×4, crash @128³) → changed to `to:` | nsys: 4 kernels **~5 ms total** (N 2.4/P 1.0/Fe 0.9/Si 0.7); ncu: grid 9,600 / 48–50 regs / **53–60% occ / 75–81% SM** (best-utilized yet); growth 23.1→20.1 s = **3.64×** | ◑ kernels optimal; **own-scope transfer ~110 ms/call** → consolidate (§1.2b step-2) |
 | §1.2b Loop A irradiance (COLUMNAR) | 3639 | `omp target teams loop collapse(2)` over (j,i), k sequential | ✅ within-band PASS (exp+daylength trig; dic ~3 ULP; CPU bit-identical) | nsys: **7.68 ms**; ncu: **grid 128 (16,384 thr) / 6.25% occ / 10.6% SM / 255 regs** — structurally grid-bound (only columns parallel; depth is a recurrence); growth 20.1→18.1 s = **4.07×** | ◑ structurally capped — **NOT a defect**; ported for residency, not speed (see note) |
 | B `f_irr_aclm` relax | ~3760 | pointwise (collapse3) | ⬜ pending | — | ❌ §1.2b remaining |
-| E ML growth-avg (COLUMNAR) | 3884 | columnar (j,i,n) | ⬜ pending — same pattern as A | — | ❌ §1.2b remaining |
-| F `f_mu_mem` relax | 3895 | pointwise (collapse4) | ⬜ pending | — | ❌ §1.2b remaining |
+| §1.2b Loop E ML growth-avg (COLUMNAR) | 3881 | `omp target teams loop collapse(3)` over (j,i,n), k seq | ✅ **bit-identical to prior GPU** (pure arithmetic, no transcendentals) | nsys 28.1 ms (2nd-biggest); ncu: **31.1% occ (5× A — n-dim parallelism), 90 regs, register-limited**; warp-cyc/inst 56.8 → **divergence-bound** (variable mixed-layer depth) | ◑ correct; divergence is a future tuning candidate |
+| §1.2b Loop F `f_mu_mem` relax | 3896 | `omp target teams loop collapse(4)` | ✅ bit-identical to prior GPU | nsys 1.48 ms; ncu: 37% occ, 58% SM (healthy pointwise) | ✅ optimal |
 
 *Ported so far = the growth pathway §1.1+§1.2 ≈ 10% of the 4,000-line reaction network. All rows above
 predate this methodology and must be re-run through the loop from the clean baseline. Remaining big
@@ -266,6 +269,7 @@ interesting one). Recorded here so they survive context/`/scratch5` purges. Revi
 | section | deferred lever | evidence (tool) | expected payoff | priority / revisit trigger |
 |---|---|---|---|---|
 | §1.2a Geider | registers 130→~64 (`launch_bounds` / `maxregcount` / split the ecotype `m`-loop) to lift the **18.75% register-capped occupancy** | ncu: occ register-capped; latency-bound (warp-cyc/inst ~15.5, DRAM ~0%) | **modest** — Geider is only ~3% of the GPU growth timer now (~0.2 s) | **LOW** — only if Geider re-surfaces as the bottleneck after §1.2b; watch for register **spills** (cuobjdump) |
+| §1.2b Loop E (ML-avg) | reduce warp divergence from variable mixed-layer depth (`kbl`) — e.g. sort/bin columns by ML depth, or split the data-dependent accumulation | ncu: warp-cyc/inst 56.8, ncu "load imbalance — highly different durations per warp"; 28 ms (2nd-biggest kernel) | **moderate** — E is ~28 ms of the GPU growth | **MED** — revisit if E surfaces as the bottleneck after Geider; divergence is inherent to the columnar ML algorithm |
 | §1.1 + §1.2a | **residency consolidation** — both still use *per-call* `enter/exit data` (~170 ms/call transfer; ncu DtoH ~155 ms/call dominates) | nsys | **HIGH** | **scheduled** — folds into §1.2b full growth-block residency (map once, copy back once) |
 | growth (all) | **endgame: whole-COBALT residency** — map tracers once/timestep; keep growth outputs on device for the CPU foodweb/chem sections instead of copying back | nsys: output DtoH remains even after block residency | **HIGH** (removes inter-section transfer) | after growth + carbon + zoo are ported |
 | §1.1 | 72-reg → 43.75% occ ceiling, but already 64% SM throughput | ncu: kernel optimal | negligible | none (kernel optimal) |

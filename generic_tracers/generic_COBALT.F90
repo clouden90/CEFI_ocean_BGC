@@ -3868,6 +3868,17 @@ contains
     ! control sinking and aggregation.  First loop provides average growth
     ! in the mixed layer.  The second averages over all depths.
     !
+! === GPU §1.2b Loops E+F (ML growth-avg + mu_mem relax): ONE residency scope; mu_mix stays resident E->F.
+    !     E is COLUMNAR (collapse(3) over (j,i,n) = 98,304 threads, k sequential — more parallel than Loop A's
+    !     16k since the phyto dim n collapses). F is pointwise collapse(4). Both PURE ARITHMETIC (no exp/trig)
+    !     -> expected BIT-IDENTICAL to the prior GPU result. (1:kblt) write -> explicit do k=1,kblt(i,j). ===
+    !$omp target enter data map(to: cobalt, phyto, dzt, grid_tmask, kblt)
+    !$omp target enter data map(to: cobalt%mld_aclm)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%mu_mix, phyto(n)%f_mu_mem)
+    enddo
+    ! E: mixed-layer growth average (k sequential per column; each (i,j,n) owns a disjoint mu_mix slice -> no race)
+    !$omp target teams loop collapse(3) private(k,tmp_mu_ML,tmp_hblt)
     do j = jsc, jec ; do i = isc, iec ; do n = 1,NUM_PHYTO !{
        tmp_mu_ML = 0.0 ; tmp_hblt = 0.0
        do k = 1, nk !{
@@ -3876,14 +3887,22 @@ contains
              tmp_hblt = tmp_hblt + dzt(i,j,k)
           endif !}
        enddo !} k-loop
-       phyto(n)%mu_mix(i,j,1:kblt(i,j)) = tmp_mu_ML / max(epsln,tmp_hblt)
-    enddo;  enddo; enddo !} i,j,n
+       do k = 1, kblt(i,j)   ! (1:kblt) array-section -> explicit loop for the kernel
+          phyto(n)%mu_mix(i,j,k) = tmp_mu_ML / max(epsln,tmp_hblt)
+       enddo
+    enddo;  enddo; enddo !} i,j,n  (GPU §1.2b-E)
 
+    ! F: mu_mem relaxation (fully pointwise)
+    !$omp target teams loop collapse(4)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec; do n = 1,NUM_PHYTO !{
        phyto(n)%f_mu_mem(i,j,k) = phyto(n)%f_mu_mem(i,j,k) + (phyto(n)%mu_mix(i,j,k) - &
              phyto(n)%f_mu_mem(i,j,k))*min(1.0,cobalt%gamma_mu_mem*dt)*grid_tmask(i,j,k)
-    enddo; enddo ; enddo; enddo !} i,j,k,n
-
+    enddo; enddo ; enddo; enddo !} i,j,k,n  (GPU §1.2b-F)
+    ! === bring E+F outputs back (downstream §1.3 + foodweb read these on host on this branch) ===
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%mu_mix, phyto(n)%f_mu_mem)
+    enddo
+    !$omp target exit data map(delete: cobalt%mld_aclm, dzt, grid_tmask, kblt, cobalt, phyto)
     !-----------------------------------------------------------------------
     ! 1.3: Nutrient uptake calculations
     !-----------------------------------------------------------------------
