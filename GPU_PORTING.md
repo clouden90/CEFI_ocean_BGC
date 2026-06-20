@@ -174,8 +174,43 @@ budget as a standard per-port diagnostic — kernel occupancy alone hides a tran
 
 **Checkpoint (commit a98f759):** growth-block compute coverage COMPLETE — §1.1, A, B, Geider, E, F,
 §1.3(N/P/Fe/Si) on GPU; nh3 on CPU (free island). Cumulative growth CPU 73 s → GPU ~17 s = **4.2×**, but
-transfer-bound per the budget above. **Next = the merge**, then the final gatekeeper (full b2b + budget
-before/after + Tier-2 `-O2` production-CPU A/B).
+transfer-bound per the budget above.
+
+### §1.2b MERGE — 10 scopes → 1 residency region (the transfer fix), and what it revealed
+**Approach:** collapsed the 10 per-section `enter/exit data` scopes into ONE — map the growth working set
+H→D **once** before §1.1, run all 10 kernels back-to-back (intermediates stay resident), copy outputs D→H
+**once** after §1.3. Built the union map by parsing all 48 directives (to:/alloc:/from: classification);
+handled the one mid-block host write (`mld_aclm`) with a single `target update to()` bridge; moved
+`allocate(kblt)` ahead of the enter-data. **Pure refactor → gated bit-identical to the 10-scope GPU result.**
+
+**Before → after (per growth-call, 128³, nsys budget):**
+
+| metric | 10 scopes | merged | change |
+|---|---|---|---|
+| kernel compute | 103 ms | 103 ms | unchanged (no math touched) |
+| **stream syncs** | 95 | **28** | **−70%** ✅ |
+| **HtoD copies / bytes** | 696 / 1.89 GB | **402 / 0.85 GB** | **−42% / −55%** ✅ |
+| DtoH copies / bytes | 141 / 1.50 GB | 137 / **1.45 GB** | ~unchanged ❌ |
+| transfer time | 373 ms | **308 ms** | −17% |
+| growth wall | 17.18 s | 16.62 s | ~flat (−3%) |
+| b2b | — | **bit-identical** ✅ | correct |
+
+**Key finding (data-flow analysis):** the merge removed the **redundant input re-mapping** (the real waste:
+−70% syncs, −1 GB HtoD), but the **DtoH did NOT shrink — and that is correct, not a defect.** A downstream
+data-flow scan showed **every output except `kblt` is genuinely read by the still-CPU downstream sections**
+(zoo/production/source-sink/carbon/diagnostics; use-counts 2–62). So the 1.45 GB DtoH is the **GPU-resident-
+growth → CPU-downstream BOUNDARY handoff**, not waste — it is **irreducible until the downstream sections are
+also ported.** The conservative `from:` was therefore right.
+
+**Leftover for the future (read before optimizing transfer further):**
+1. **The boundary DtoH (~204 ms/call) is the dominant remaining cost and is irreducible within the growth
+   block.** Eliminating it requires the **whole-COBALT residency endgame** — port the downstream sections
+   (zoo, production, source/sink, carbon) and extend the resident scope so each output is produced AND
+   consumed on-device, pushing the GPU/CPU boundary outward until it disappears. This is the next major phase.
+2. The merge left ~10 **empty no-op `do n=1,NUM_PHYTO` loops** (former per-phyto map wrappers) — cosmetic,
+   harmless (zero-body), pending a trivial cleanup commit.
+3. HtoD is still 402 copies/0.85 GB — the once-each input map of ~150 derived-type component arrays
+   (deep-copy overhead). Further reduction would need flattening derived types (large refactor, low ROI now).
 
 ## The baseline — TWO pinned cases (correctness vs speed are separated)
 Both builds are the *same source*, no-MPI, single-PE, differing only in how `generic_COBALT.o` is compiled:

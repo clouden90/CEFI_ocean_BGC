@@ -3477,19 +3477,37 @@ contains
     ! Calculate iron cell quota
     !
     ! === GPU §1.1: nutrient limitation -- do concurrent + standalone per-call OpenMP-target residency (mem:separate) ===
-    !$omp target enter data map(to: cobalt)
-    !$omp target enter data map(to: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4,cobalt%f_fed)
-    !$omp target enter data map(to: phyto)
     do n = 1,NUM_PHYTO
-      !$omp target enter data map(to: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
-      !$omp target enter data map(alloc: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
-      !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
-      !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim)
     enddo
     ! Compute via explicit omp target teams loop collapse(3). TEST: bare `do concurrent` here was grid 9600
     ! in isolation but REGRESSED to grid-75/6.25%-occ once the §1.2 Geider loop was added to the file --
     ! nvfortran's do-concurrent auto-parallelization is context-sensitive/unreliable; collapse(3) guarantees
     ! the full 9600-block launch deterministically. See GPU_PORTING.md.
+    ! === GPU §1.2b MERGE: ONE residency scope for the whole growth block (§1.1 -> §1.3). Map the working
+    !     set in ONCE, run all 10 kernels back-to-back (intermediates stay resident on device), copy out
+    !     ONCE. nh3 diag stays a CPU free island in the middle. Pure refactor -> BIT-IDENTICAL to the prior
+    !     10-scope GPU result. (Only mid-block host write to a mapped array is mld_aclm -> one update bridge.)
+    allocate(kblt(isc:iec,jsc:jec))   ! moved up: host array must exist before its map(alloc:)
+    !$omp target enter data map(to: cobalt, phyto, Temp, geolat, zmid, Salt, dzt, grid_tmask, &
+    !$omp&   sw_pen_band, opacity_band, max_wavelength_band)
+    !$omp target enter data map(to: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4, &
+    !$omp&   cobalt%f_fed,cobalt%mld_aclm,cobalt%f_silg,cobalt%f_simd,cobalt%f_irr_aclm_sfc, &
+    !$omp&   cobalt%f_irr_aclm_z,cobalt%f_irr_aclm,cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jprod_ldon, &
+    !$omp&   cobalt%jprod_ldop,cobalt%jo2resp_wc,cobalt%nlg_diatoms,cobalt%nmd_diatoms,cobalt%nlg_misc, &
+    !$omp&   cobalt%nmd_misc)
+    !$omp target enter data map(alloc: cobalt%daylength,cobalt%irr_inst,cobalt%irr_aclm_inst, &
+    !$omp&   cobalt%irr_mix,kblt,cobalt%f_chl,cobalt%expkT)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p,phyto(n)%f_pcmlim_aclm, &
+      !$omp&   phyto(n)%f_mu_mem,phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
+      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4,phyto(n)%jexuloss_fe, &
+      !$omp&   phyto(n)%jdissloss_si,phyto(n)%q_si_2_n)
+      !$omp target enter data map(alloc: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
+      !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
+      !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim,phyto(n)%pcmlim_aclm_inst, &
+      !$omp&   phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu,phyto(n)%P_C_max, &
+      !$omp&   phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix)
+    enddo
     !$omp target teams loop collapse(3) private(n,k_po4_adjust)
     do k=1,nk ; do j=jsc,jec ; do i=isc,iec
        do n = 1,NUM_PHYTO    !{
@@ -3547,13 +3565,7 @@ contains
     enddo ; enddo ; enddo  !} i,j,k  (GPU §1.1: omp target teams loop collapse(3))
     ! === bring §1.1 outputs back to host (rest of COBALT is CPU on this branch) ===
     do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
-      !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
-      !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim)
-      !$omp target exit data map(delete: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
     enddo
-    !$omp target exit data map(delete: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4,cobalt%f_fed)
-    !$omp target exit data map(delete: cobalt,phyto)
     !
     !-----------------------------------------------------------------------
     ! 1.2: Light Limitation/Growth Calculations
@@ -3576,6 +3588,7 @@ contains
                                 "may be using an unrealistic constant value!")
       endif
       cobalt%mld_aclm(:,:) = photo_acc_dpth(:,:)
+      !$omp target update to(cobalt%mld_aclm)  ! merge bridge: host set mld_aclm after enter-data
     else
         call mpp_error(FATAL, "COBALT has been updated to use a photoacclimation mixed layer depth from MOM6."//&
                               "If you are seeing this error, you may not be using an updated version of MOM6  "//&
@@ -3623,18 +3636,11 @@ contains
     !       - day_of_year()/rev_angle/dec_angle/frac hoisted out (constant per call; no call inside kernel);
     !       - (1:kblt) array-section writes -> explicit do k=1,kbl loop.
     !     Has exp + daylength trig -> b2b WITHIN-BAND (not bit-identical). Own scope (merge later). ===
-    allocate(kblt(isc:iec,jsc:jec))       ! max k index in mixed layer (2D output, read downstream)
     frac_sfc_irrad_aclm = 1.0/(2.71828**cobalt%ml_aclm_efold) ! controls acclimation in deep mixed layers
     yearday = day_of_year(model_time)
     rev_angle = 0.2163108 + 2.0*atan(0.9671396*tan(0.00860*(real(yearday,8) - 186.0)))
     dec_angle = asin(0.39795*cos(rev_angle))
-    !$omp target enter data map(to: cobalt, phyto, Temp, geolat, zmid, Salt, dzt, grid_tmask, &
-    !$omp&   sw_pen_band, opacity_band, max_wavelength_band)
-    !$omp target enter data map(to: cobalt%mld_aclm, cobalt%f_irr_aclm_sfc, cobalt%f_irr_aclm_z)
-    !$omp target enter data map(alloc: cobalt%daylength, cobalt%irr_inst, cobalt%irr_aclm_inst, cobalt%irr_mix, kblt)
     do n = 1,NUM_PHYTO
-      !$omp target enter data map(to: phyto(n)%liebig_lim)
-      !$omp target enter data map(alloc: phyto(n)%pcmlim_aclm_inst)
     enddo
     !$omp target teams loop collapse(2) private(nb,k,n,kbl,sfc_irr_loc,irr_band_loc,pcmlim_ML, &
     !$omp&   tmp_irrad,tmp_opacity,tmp_irrad_ML,tmp_hblt,tmp_irrad_aclm,tmp_zaclm,irrad_aclm_thresh,temp_arg)
@@ -3722,14 +3728,8 @@ contains
        enddo
     enddo;  enddo !} i,j
     ! === bring Loop A outputs back to host (B/nh3/E/F + downstream are CPU on this branch) ===
-    !$omp target exit data map(from: cobalt%daylength,cobalt%f_irr_aclm_sfc,cobalt%f_irr_aclm_z, &
-    !$omp&   cobalt%irr_inst,cobalt%irr_aclm_inst,cobalt%irr_mix,kblt)
     do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%pcmlim_aclm_inst)
-      !$omp target exit data map(delete: phyto(n)%liebig_lim)
     enddo
-    !$omp target exit data map(delete: cobalt%mld_aclm, Temp, geolat, zmid, Salt, dzt, grid_tmask, &
-    !$omp&   sw_pen_band, opacity_band, max_wavelength_band, cobalt, phyto)    !
     ! Calculate the final photoacclimation irradiance using the standard relaxation
     ! scheme (I_aclm(t+1) = I_aclm(t) + (I*(24/daylength)-I_aclm(t))*gamma*dt).
     !
@@ -3738,10 +3738,7 @@ contains
     ! === GPU §1.2b Loop B (f_irr_aclm / f_pcmlim_aclm relaxation): pointwise collapse(3) + own scope.
     !     Pure arithmetic (RMW relaxation, no transcendentals) -> expected BIT-IDENTICAL to prior GPU.
     !     f_irr_aclm/f_pcmlim_aclm are RMW accumulators -> mapped to:/from: (carry prior value). ===
-    !$omp target enter data map(to: cobalt, phyto, grid_tmask)
-    !$omp target enter data map(to: cobalt%f_irr_aclm, cobalt%irr_aclm_inst)
     do n = 1,NUM_PHYTO
-      !$omp target enter data map(to: phyto(n)%f_pcmlim_aclm, phyto(n)%pcmlim_aclm_inst)
     enddo
     !$omp target teams loop collapse(3) private(n)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
@@ -3755,11 +3752,7 @@ contains
 
     enddo; enddo ; enddo !} i,j,k  (GPU §1.2b-B)
     do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%f_pcmlim_aclm)
-      !$omp target exit data map(delete: phyto(n)%pcmlim_aclm_inst)
     enddo
-    !$omp target exit data map(from: cobalt%f_irr_aclm)
-    !$omp target exit data map(delete: cobalt%irr_aclm_inst, grid_tmask, cobalt, phyto)
 
 
     ! This needs to be moved!
@@ -3789,14 +3782,8 @@ contains
     !     + per-kernel OpenMP-target residency (mem:separate). Only this loop is offloaded; the
     !     columnar irradiance loops (A/E) stay on CPU and bridge via the host-valid inputs mapped
     !     below. §1.2b will restructure A/E and merge §1.1+§1.2 into one growth-block scope. ===
-    !$omp target enter data map(to: cobalt, phyto, Temp, kblt)
-    !$omp target enter data map(to: cobalt%f_irr_aclm, cobalt%irr_inst)
     do n = 1,NUM_PHYTO
-      !$omp target enter data map(to: phyto(n)%f_n, phyto(n)%f_pcmlim_aclm, phyto(n)%liebig_lim)
-      !$omp target enter data map(alloc: phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu, &
-      !$omp&   phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix)
     enddo
-    !$omp target enter data map(alloc: cobalt%f_chl, cobalt%expkT)
     ! TUNE (§1.2a profile): bare `do concurrent` under-parallelized this complex body (nvfortran
     ! collapsed only k -> 75 blocks / 9600 threads / 6.25% occ). Explicit collapse(3) forces all 3 dims.
     !$omp target teams loop collapse(3) private(n,m,bresp_temp,mu_opt,alpha_step,alpha_temp, &
@@ -3870,12 +3857,7 @@ contains
     enddo ; enddo ; enddo  !} i,j,k  (GPU §1.2a Geider: omp target teams loop collapse(3))
     ! === bring §1.2a Geider outputs back to host (columnar A/E + downstream are CPU on this branch) ===
     do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu, &
-      !$omp&   phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix)
-      !$omp target exit data map(delete: phyto(n)%f_n, phyto(n)%f_pcmlim_aclm, phyto(n)%liebig_lim)
     enddo
-    !$omp target exit data map(from: cobalt%f_chl, cobalt%expkT)
-    !$omp target exit data map(delete: cobalt%f_irr_aclm, cobalt%irr_inst, Temp, kblt, cobalt, phyto)
 
     !
     ! Calculate the time averaged growth rate (generally over 24 hours)
@@ -3887,10 +3869,7 @@ contains
     !     E is COLUMNAR (collapse(3) over (j,i,n) = 98,304 threads, k sequential — more parallel than Loop A's
     !     16k since the phyto dim n collapses). F is pointwise collapse(4). Both PURE ARITHMETIC (no exp/trig)
     !     -> expected BIT-IDENTICAL to the prior GPU result. (1:kblt) write -> explicit do k=1,kblt(i,j). ===
-    !$omp target enter data map(to: cobalt, phyto, dzt, grid_tmask, kblt)
-    !$omp target enter data map(to: cobalt%mld_aclm)
     do n = 1,NUM_PHYTO
-      !$omp target enter data map(to: phyto(n)%mu_mix, phyto(n)%f_mu_mem)
     enddo
     ! E: mixed-layer growth average (k sequential per column; each (i,j,n) owns a disjoint mu_mix slice -> no race)
     !$omp target teams loop collapse(3) private(k,tmp_mu_ML,tmp_hblt)
@@ -3915,9 +3894,7 @@ contains
     enddo; enddo ; enddo; enddo !} i,j,k,n  (GPU §1.2b-F)
     ! === bring E+F outputs back (downstream §1.3 + foodweb read these on host on this branch) ===
     do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%mu_mix, phyto(n)%f_mu_mem)
     enddo
-    !$omp target exit data map(delete: cobalt%mld_aclm, dzt, grid_tmask, kblt, cobalt, phyto)
     !-----------------------------------------------------------------------
     ! 1.3: Nutrient uptake calculations
     !-----------------------------------------------------------------------
@@ -3926,20 +3903,10 @@ contains
     !     (mem:separate). Own scope for now; step-2 consolidates §1.1+Geider+§1.3 into one block scope.
     !     NOTE jprod_*/jo2resp_wc are accumulators (read-modify-write) -> mapped `to:` (NOT alloc) so their
     !     prior host value is preserved; alloc would zero them on device and corrupt downstream sections. ===
-    !$omp target enter data map(to: cobalt, phyto)
-    !$omp target enter data map(to: cobalt%f_o2,cobalt%expkT,cobalt%f_irr_aclm,cobalt%f_silg,cobalt%f_simd, &
-    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jprod_ldon,cobalt%jprod_ldop,cobalt%jo2resp_wc)
-    !$omp target enter data map(to: cobalt%nlg_diatoms,cobalt%nmd_diatoms,cobalt%nlg_misc,cobalt%nmd_misc)
     do n = 1,NUM_PHYTO
-      !$omp target enter data map(to: phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%mu,phyto(n)%f_n,phyto(n)%f_p, &
-      !$omp&   phyto(n)%uptake_p_2_n,phyto(n)%q_fe_2_n,phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%alpha, &
-      !$omp&   phyto(n)%theta,phyto(n)%liebig_lim,phyto(n)%felim,phyto(n)%silim,phyto(n)%f_fe,phyto(n)%bresp)
       ! NOTE map `to:` (not alloc): juptake_n2 (DIAZO-only), juptake_sio4/jdissloss_si/q_si_2_n (diatom-only)
       ! are written for only SOME phyto indices; the rest must carry their prior host value, else alloc
       ! gives device garbage -> downstream sum corrupts tracers (caught by b2b: 1e-4 @4x4, crash @128^3).
-      !$omp target enter data map(to: phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
-      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4,phyto(n)%jexuloss_fe, &
-      !$omp&   phyto(n)%jdissloss_si,phyto(n)%q_si_2_n)
     enddo
     ! Uptake of nitrate and ammonia
     !$omp target teams loop collapse(3) private(n)
@@ -4055,17 +4022,27 @@ contains
     enddo; enddo ; enddo !} i,j,k
     ! === bring §1.3 outputs back to host (downstream foodweb/chem sections are CPU on this branch) ===
     do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
+    enddo
+
+    ! === GPU §1.2b MERGE: copy growth-block outputs back to host ONCE, release the scope ===
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
+      !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
+      !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim,phyto(n)%pcmlim_aclm_inst, &
+      !$omp&   phyto(n)%f_pcmlim_aclm,phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu, &
+      !$omp&   phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix, &
+      !$omp&   phyto(n)%f_mu_mem,phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
       !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4,phyto(n)%jexuloss_fe, &
       !$omp&   phyto(n)%jdissloss_si,phyto(n)%q_si_2_n)
-      !$omp target exit data map(delete: phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%mu,phyto(n)%f_n,phyto(n)%f_p, &
-      !$omp&   phyto(n)%uptake_p_2_n,phyto(n)%q_fe_2_n,phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%alpha, &
-      !$omp&   phyto(n)%theta,phyto(n)%liebig_lim,phyto(n)%felim,phyto(n)%silim,phyto(n)%f_fe,phyto(n)%bresp)
+      !$omp target exit data map(delete: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
     enddo
-    !$omp target exit data map(from: cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jprod_ldon,cobalt%jprod_ldop, &
-    !$omp&   cobalt%jo2resp_wc,cobalt%nlg_diatoms,cobalt%nmd_diatoms,cobalt%nlg_misc,cobalt%nmd_misc)
-    !$omp target exit data map(delete: cobalt%f_o2,cobalt%expkT,cobalt%f_irr_aclm,cobalt%f_silg,cobalt%f_simd,cobalt,phyto)
-
+    !$omp target exit data map(from: cobalt%daylength,cobalt%irr_inst,cobalt%irr_aclm_inst,cobalt%irr_mix, &
+    !$omp&   kblt,cobalt%f_irr_aclm_sfc,cobalt%f_irr_aclm_z,cobalt%f_irr_aclm,cobalt%f_chl,cobalt%expkT, &
+    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jprod_ldon,cobalt%jprod_ldop,cobalt%jo2resp_wc, &
+    !$omp&   cobalt%nlg_diatoms,cobalt%nmd_diatoms,cobalt%nlg_misc,cobalt%nmd_misc)
+    !$omp target exit data map(delete: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4, &
+    !$omp&   cobalt%f_fed,Temp,geolat,zmid,Salt,dzt,grid_tmask,sw_pen_band,opacity_band, &
+    !$omp&   max_wavelength_band,cobalt%mld_aclm,cobalt%f_silg,cobalt%f_simd,cobalt,phyto)
     call mpp_clock_end(id_clock_phyto_growth)
 !
 !---------------------------------------------------------------------------
