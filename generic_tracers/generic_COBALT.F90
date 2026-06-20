@@ -3477,8 +3477,6 @@ contains
     ! Calculate iron cell quota
     !
     ! === GPU §1.1: nutrient limitation -- do concurrent + standalone per-call OpenMP-target residency (mem:separate) ===
-    do n = 1,NUM_PHYTO
-    enddo
     ! Compute via explicit omp target teams loop collapse(3). TEST: bare `do concurrent` here was grid 9600
     ! in isolation but REGRESSED to grid-75/6.25%-occ once the §1.2 Geider loop was added to the file --
     ! nvfortran's do-concurrent auto-parallelization is context-sensitive/unreliable; collapse(3) guarantees
@@ -3564,8 +3562,6 @@ contains
        enddo !} n
     enddo ; enddo ; enddo  !} i,j,k  (GPU §1.1: omp target teams loop collapse(3))
     ! === bring §1.1 outputs back to host (rest of COBALT is CPU on this branch) ===
-    do n = 1,NUM_PHYTO
-    enddo
     !
     !-----------------------------------------------------------------------
     ! 1.2: Light Limitation/Growth Calculations
@@ -3640,8 +3636,6 @@ contains
     yearday = day_of_year(model_time)
     rev_angle = 0.2163108 + 2.0*atan(0.9671396*tan(0.00860*(real(yearday,8) - 186.0)))
     dec_angle = asin(0.39795*cos(rev_angle))
-    do n = 1,NUM_PHYTO
-    enddo
     !$omp target teams loop collapse(2) private(nb,k,n,kbl,sfc_irr_loc,irr_band_loc,pcmlim_ML, &
     !$omp&   tmp_irrad,tmp_opacity,tmp_irrad_ML,tmp_hblt,tmp_irrad_aclm,tmp_zaclm,irrad_aclm_thresh,temp_arg)
     do j = jsc, jec ; do i = isc, iec   !{
@@ -3728,8 +3722,6 @@ contains
        enddo
     enddo;  enddo !} i,j
     ! === bring Loop A outputs back to host (B/nh3/E/F + downstream are CPU on this branch) ===
-    do n = 1,NUM_PHYTO
-    enddo
     ! Calculate the final photoacclimation irradiance using the standard relaxation
     ! scheme (I_aclm(t+1) = I_aclm(t) + (I*(24/daylength)-I_aclm(t))*gamma*dt).
     !
@@ -3738,8 +3730,6 @@ contains
     ! === GPU §1.2b Loop B (f_irr_aclm / f_pcmlim_aclm relaxation): pointwise collapse(3) + own scope.
     !     Pure arithmetic (RMW relaxation, no transcendentals) -> expected BIT-IDENTICAL to prior GPU.
     !     f_irr_aclm/f_pcmlim_aclm are RMW accumulators -> mapped to:/from: (carry prior value). ===
-    do n = 1,NUM_PHYTO
-    enddo
     !$omp target teams loop collapse(3) private(n)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
          cobalt%f_irr_aclm(i,j,k) = (cobalt%f_irr_aclm(i,j,k) + (cobalt%irr_aclm_inst(i,j,k) - &
@@ -3751,8 +3741,6 @@ contains
          enddo
 
     enddo; enddo ; enddo !} i,j,k  (GPU §1.2b-B)
-    do n = 1,NUM_PHYTO
-    enddo
 
 
     ! This needs to be moved!
@@ -3782,8 +3770,6 @@ contains
     !     + per-kernel OpenMP-target residency (mem:separate). Only this loop is offloaded; the
     !     columnar irradiance loops (A/E) stay on CPU and bridge via the host-valid inputs mapped
     !     below. §1.2b will restructure A/E and merge §1.1+§1.2 into one growth-block scope. ===
-    do n = 1,NUM_PHYTO
-    enddo
     ! TUNE (§1.2a profile): bare `do concurrent` under-parallelized this complex body (nvfortran
     ! collapsed only k -> 75 blocks / 9600 threads / 6.25% occ). Explicit collapse(3) forces all 3 dims.
     !$omp target teams loop collapse(3) private(n,m,bresp_temp,mu_opt,alpha_step,alpha_temp, &
@@ -3856,8 +3842,6 @@ contains
 
     enddo ; enddo ; enddo  !} i,j,k  (GPU §1.2a Geider: omp target teams loop collapse(3))
     ! === bring §1.2a Geider outputs back to host (columnar A/E + downstream are CPU on this branch) ===
-    do n = 1,NUM_PHYTO
-    enddo
 
     !
     ! Calculate the time averaged growth rate (generally over 24 hours)
@@ -3869,8 +3853,6 @@ contains
     !     E is COLUMNAR (collapse(3) over (j,i,n) = 98,304 threads, k sequential — more parallel than Loop A's
     !     16k since the phyto dim n collapses). F is pointwise collapse(4). Both PURE ARITHMETIC (no exp/trig)
     !     -> expected BIT-IDENTICAL to the prior GPU result. (1:kblt) write -> explicit do k=1,kblt(i,j). ===
-    do n = 1,NUM_PHYTO
-    enddo
     ! E: mixed-layer growth average (k sequential per column; each (i,j,n) owns a disjoint mu_mix slice -> no race)
     !$omp target teams loop collapse(3) private(k,tmp_mu_ML,tmp_hblt)
     do j = jsc, jec ; do i = isc, iec ; do n = 1,NUM_PHYTO !{
@@ -3893,8 +3875,6 @@ contains
              phyto(n)%f_mu_mem(i,j,k))*min(1.0,cobalt%gamma_mu_mem*dt)*grid_tmask(i,j,k)
     enddo; enddo ; enddo; enddo !} i,j,k,n  (GPU §1.2b-F)
     ! === bring E+F outputs back (downstream §1.3 + foodweb read these on host on this branch) ===
-    do n = 1,NUM_PHYTO
-    enddo
     !-----------------------------------------------------------------------
     ! 1.3: Nutrient uptake calculations
     !-----------------------------------------------------------------------
@@ -4021,8 +4001,6 @@ contains
        phyto(MEDIUM)%q_si_2_n(i,j,k) = cobalt%f_simd(i,j,k)/(phyto(MEDIUM)%f_n(i,j,k)+epsln)
     enddo; enddo ; enddo !} i,j,k
     ! === bring §1.3 outputs back to host (downstream foodweb/chem sections are CPU on this branch) ===
-    do n = 1,NUM_PHYTO
-    enddo
 
     ! === GPU §1.2b MERGE: copy growth-block outputs back to host ONCE, release the scope ===
     do n = 1,NUM_PHYTO
