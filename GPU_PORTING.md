@@ -149,6 +149,34 @@ block can go single-scope), **not** for A's own speed. Low occupancy here is the
 > stalls), it does not raise any single kernel's occupancy. This is the on-ramp to the MOM6 RESIDENT endgame
 > (tracers resident across all of COBALT / the timestep).
 
+### §1.2b COMPLETE compute coverage — the COMPUTE-vs-TRANSFER time budget (the port-level diagnostic)
+Per-kernel occupancy answers *"is each kernel efficient";* the **time budget** answers *"is the PORT efficient"* —
+different questions. Comprehensive `nsys` budget of the current **10-kernel** build (128³, per growth-call =
+totals ÷2 for the 2 calls/step):
+
+| component | time/call | volume / count | source |
+|---|---|---|---|
+| **Kernel compute** (Σ all 10) | **103 ms** | — | cuda_gpu_kern_sum |
+| **DtoH transfer** | **214 ms** | 1.50 GB, **141 copies** | cuda_gpu_mem_time/size |
+| **HtoD transfer** | **159 ms** | 1.89 GB, **696 copies** | cuda_gpu_mem_time/size |
+| **Stream sync (host blocked)** | 103 ms | 95 syncs | cuda_api_sum |
+| device alloc / launch | ~5 / 0.2 ms | ~60 allocs / 10 launches | cuda_api_sum |
+
+**Diagnosis: the port is transfer/overhead-bound, NOT compute-bound.** Compute : transfer ≈ **1 : 3.6**;
+compute is ~22% of GPU-active time, ~7% of the ~1.43 s/call growth wall. **Smoking gun: 837 memcpy ops +
+~3.4 GB + ~95 syncs per call** — not the working-set size, but **redundant re-mapping**: 10 separate
+`enter/exit data` scopes each re-map the common `cobalt`/`phyto` derived types (every allocatable component =
+its own copy + pointer-attach → 696 HtoD ops) and each forces a sync. The ~0.95 s/call gap between GPU-active
+(476 ms) and wall (1.43 s) is host-side residency management (issuing 837 maps + 95 syncs across 10 scopes).
+→ **The MERGE (10 scopes → 1, map once in / once out) is the single highest-leverage remaining change**, and
+the per-section wins were *capped by this overhead by construction*. **Lesson: pull the compute-vs-transfer
+budget as a standard per-port diagnostic — kernel occupancy alone hides a transfer-bound implementation.**
+
+**Checkpoint (commit a98f759):** growth-block compute coverage COMPLETE — §1.1, A, B, Geider, E, F,
+§1.3(N/P/Fe/Si) on GPU; nh3 on CPU (free island). Cumulative growth CPU 73 s → GPU ~17 s = **4.2×**, but
+transfer-bound per the budget above. **Next = the merge**, then the final gatekeeper (full b2b + budget
+before/after + Tier-2 `-O2` production-CPU A/B).
+
 ## The baseline — TWO pinned cases (correctness vs speed are separated)
 Both builds are the *same source*, no-MPI, single-PE, differing only in how `generic_COBALT.o` is compiled:
 - **CPU build** (`nvhpc-x86-cpu-nompi`): `generic_COBALT.o` CPU-only (`do concurrent`→serial, `!$omp target` ignored), `-O0 -Mnovect -Mnofma -i4 -r8 -byteswapio`. 0 MPI / 0 CUDA symbols.
