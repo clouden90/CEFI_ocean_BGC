@@ -81,6 +81,20 @@ Per-warp latency and register count are ~unchanged — the win is **occupancy/pa
 utilization axis with **no metric regressing**. Remaining headroom: occupancy is **register-capped at 18.75%**
 (130 regs) → next lever is registers→~64 via `launch_bounds` / kernel-split.
 
+### §1.3 nutrient uptake (N/P/Fe/Si) — 4 `collapse(3)` kernels (§1.2b step-1)
+Ported as its own resident block. **A real bug the b2b caught (not round-off):** 4 outputs written for only
+*some* indices — `juptake_n2` (DIAZO-only), `juptake_sio4`/`jdissloss_si`/`q_si_2_n` (diatom LARGE/MEDIUM-only)
+— were mapped `alloc:`, so the un-written phyto indices got **uninitialized device garbage** → b2b **1e-4 rel
+@4×4, crash @128³**. Fix: map them **`to:`** (carry prior host values); only fully-written-before-read fields
+are safe as `alloc:`, and accumulators (`jprod_*`/`jo2resp_wc`) must be `to:` too. After the fix → **within-band
+PASS** (CPU bit-identical to ref). *The conservation-protected totals b2b caught this; a smaller version could
+slip through → argues for field-level b2b later.*
+- **ncu:** all 4 kernels grid 9,600, **48–50 regs → 53–60% achieved occupancy, 75–81% SM throughput** — the
+  best-utilized kernels so far (low register pressure). **nsys:** ~5 ms total (N 2.4/P 1.0/Fe 0.9/Si 0.7 ms).
+- **But §1.3 was 367 ms on CPU and growth only dropped 23.1→20.1 s** — its **own-scope transfer (~110 ms/call)
+  ate most of the win** → the motivation for **step-2: consolidate §1.1+Geider+§1.3 into one residency scope**
+  so intermediates stay resident instead of round-tripping.
+
 **Residency axis (`nsys`) — the kernel is not the cost; the per-call transfer is.**
 §1.1 with per-call `enter/exit data` (1-coupling-step run, 2 COBALT calls):
 
@@ -200,6 +214,7 @@ Run for **every** section, iterating until it hits its roofline / occupancy ceil
 | B light attenuation | 3656 | `do concurrent(j,i) local()` | aggregate only | yes — 255 regs, local-mem spill | ❌ |
 | C acclimation | 3756 | `do concurrent(k,j,i)` | aggregate only | yes — under-parallelized | ❌ `collapse(3)` pending |
 | §1.2a Geider growth | 3800 | `omp target teams loop collapse(3)` | ✅ within-band PASS (exp/MUFU.RCP, 2–3e-16) | nsys: 272→54 ms (5×); ncu: grid 9,600 / 18.7% occ / 31.8% SM; growth 73.5→23.1 s (**3.18×**) | ◑ reg-capped 18.75% → launch_bounds/split next |
+| §1.3 uptake N/P/Fe/Si | 3924–4009 | 4× `omp target teams loop collapse(3)` | ✅ within-band PASS (Fe `exp`; CPU bit-identical). **Bug caught+fixed:** partial-write outputs were `alloc:` → device garbage (b2b 1e-4 @4×4, crash @128³) → changed to `to:` | nsys: 4 kernels **~5 ms total** (N 2.4/P 1.0/Fe 0.9/Si 0.7); ncu: grid 9,600 / 48–50 regs / **53–60% occ / 75–81% SM** (best-utilized yet); growth 23.1→20.1 s = **3.64×** | ◑ kernels optimal; **own-scope transfer ~110 ms/call** → consolidate (§1.2b step-2) |
 | F mixed-layer avg | 3872 | `do concurrent(j,i,n) local()` | aggregate only | yes — **#1 kernel, ~97% idle** | ❌ |
 | G growth-memory | 3887 | `do concurrent(k,j,i,n)` | aggregate only | partial | ❌ |
 

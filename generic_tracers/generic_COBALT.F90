@@ -3901,8 +3901,27 @@ contains
     ! 1.3: Nutrient uptake calculations
     !-----------------------------------------------------------------------
     !
+    ! === GPU §1.2b/§1.3 nutrient uptake: omp target teams loop collapse(3) + own per-call residency
+    !     (mem:separate). Own scope for now; step-2 consolidates §1.1+Geider+§1.3 into one block scope.
+    !     NOTE jprod_*/jo2resp_wc are accumulators (read-modify-write) -> mapped `to:` (NOT alloc) so their
+    !     prior host value is preserved; alloc would zero them on device and corrupt downstream sections. ===
+    !$omp target enter data map(to: cobalt, phyto)
+    !$omp target enter data map(to: cobalt%f_o2,cobalt%expkT,cobalt%f_irr_aclm,cobalt%f_silg,cobalt%f_simd, &
+    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jprod_ldon,cobalt%jprod_ldop,cobalt%jo2resp_wc)
+    !$omp target enter data map(to: cobalt%nlg_diatoms,cobalt%nmd_diatoms,cobalt%nlg_misc,cobalt%nmd_misc)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%mu,phyto(n)%f_n,phyto(n)%f_p, &
+      !$omp&   phyto(n)%uptake_p_2_n,phyto(n)%q_fe_2_n,phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%alpha, &
+      !$omp&   phyto(n)%theta,phyto(n)%liebig_lim,phyto(n)%felim,phyto(n)%silim,phyto(n)%f_fe,phyto(n)%bresp)
+      ! NOTE map `to:` (not alloc): juptake_n2 (DIAZO-only), juptake_sio4/jdissloss_si/q_si_2_n (diatom-only)
+      ! are written for only SOME phyto indices; the rest must carry their prior host value, else alloc
+      ! gives device garbage -> downstream sum corrupts tracers (caught by b2b: 1e-4 @4x4, crash @128^3).
+      !$omp target enter data map(to: phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
+      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4,phyto(n)%jexuloss_fe, &
+      !$omp&   phyto(n)%jdissloss_si,phyto(n)%q_si_2_n)
+    enddo
     ! Uptake of nitrate and ammonia
-    !
+    !$omp target teams loop collapse(3) private(n)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        n = DIAZO
        phyto(n)%juptake_n2(i,j,k) =  max(0.0,(1.0 - phyto(n)%no3lim(i,j,k) - phyto(n)%nh4lim(i,j,k))* &
@@ -3940,6 +3959,7 @@ contains
     !
     ! Phosphorous uptake
     !
+    !$omp target teams loop collapse(3) private(n)
     do k = 1, nk  ;    do j = jsc, jec ;      do i = isc, iec   !{
        n=DIAZO
        phyto(n)%juptake_po4(i,j,k) = (phyto(n)%juptake_n2(i,j,k)+phyto(n)%juptake_nh4(i,j,k) + &
@@ -3964,6 +3984,7 @@ contains
     !
     ! Iron uptake
     !
+    !$omp target teams loop collapse(3) private(n)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        do n = 1, NUM_PHYTO  !{
           ! Take up iron if below maximum guota and day averaged growth is positive
@@ -3985,6 +4006,7 @@ contains
     !
     ! Silicate uptake
     !
+    !$omp target teams loop collapse(3)
     do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec   !{
 	   ! Diatoms are modeled as the fraction of the medium and large phytoplankton based on silica limitation
        cobalt%nlg_diatoms(i,j,k)=phyto(LARGE)%f_n(i,j,k)*phyto(LARGE)%silim(i,j,k)
@@ -4010,6 +4032,18 @@ contains
        phyto(LARGE)%q_si_2_n(i,j,k) = cobalt%f_silg(i,j,k)/(phyto(LARGE)%f_n(i,j,k)+epsln)
        phyto(MEDIUM)%q_si_2_n(i,j,k) = cobalt%f_simd(i,j,k)/(phyto(MEDIUM)%f_n(i,j,k)+epsln)
     enddo; enddo ; enddo !} i,j,k
+    ! === bring §1.3 outputs back to host (downstream foodweb/chem sections are CPU on this branch) ===
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
+      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4,phyto(n)%jexuloss_fe, &
+      !$omp&   phyto(n)%jdissloss_si,phyto(n)%q_si_2_n)
+      !$omp target exit data map(delete: phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%mu,phyto(n)%f_n,phyto(n)%f_p, &
+      !$omp&   phyto(n)%uptake_p_2_n,phyto(n)%q_fe_2_n,phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%alpha, &
+      !$omp&   phyto(n)%theta,phyto(n)%liebig_lim,phyto(n)%felim,phyto(n)%silim,phyto(n)%f_fe,phyto(n)%bresp)
+    enddo
+    !$omp target exit data map(from: cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jprod_ldon,cobalt%jprod_ldop, &
+    !$omp&   cobalt%jo2resp_wc,cobalt%nlg_diatoms,cobalt%nmd_diatoms,cobalt%nlg_misc,cobalt%nmd_misc)
+    !$omp target exit data map(delete: cobalt%f_o2,cobalt%expkT,cobalt%f_irr_aclm,cobalt%f_silg,cobalt%f_simd,cobalt,phyto)
 
     call mpp_clock_end(id_clock_phyto_growth)
 !
