@@ -114,6 +114,41 @@ kernel is a rounding error next to the transfer."* Only together do they identif
 **residency, not the kernel.** → Port in **residency groups** (map tracers once; keep intermediate outputs
 on-device for the downstream sections that consume them) rather than thin isolated slices.
 
+### §1.2b Loop A — irradiance/photoacclimation (COLUMNAR): a structurally GPU-bound kernel, ported for residency
+Loop A is the hardest loop in the growth block: per water-column `(i,j)`, a **sequential depth `k`-loop**
+that carries state down-column (light attenuation = a prefix product; mixed-layer integrals + a
+data-dependent boundary `kbl`). Restructured single-source for GPU: `collapse(2)` over (j,i), k sequential;
+per-thread private scratch (`irr_band_loc(nbands)`, `pcmlim_ML(NUM_PHYTO)`, `sfc_irr_loc`, `kbl` — the
+shared band-array and the `tmp_pcmlim_aclm_ML` accumulator would otherwise **race** across columns);
+`day_of_year`/angles hoisted; `(1:kblt)` array-sections → explicit `do k=1,kbl`. **Provenance:** TIME from
+`nsys`, all SOL/occupancy/registers from `ncu --set full`, growth wall from `mpp_clock`, b2b from totals.
+
+| metric (source) | value | reading |
+|---|---|---|
+| b2b | within-band PASS (dic ~3 ULP; CPU bit-identical to ref) | A adds exp+trig → within-band, not bit-identical (expected) |
+| Grid (ncu) | **128 blocks (16,384 threads)** | only the columns are parallel; depth is a recurrence |
+| Achieved occupancy (ncu) | **6.25%** | grid-starved (~1 block/SM) — **structural ceiling**, not tunable |
+| Registers (ncu) | 255 (hw max) | 2nd ceiling (theo occ 12.5%), but grid is the *binding* one |
+| Compute / Mem / DRAM SOL (ncu) | 10.6% / 0.76% / 0.46% | latency-bound, not memory-bound (L1/L2 ~80/65%) |
+| kernel time (nsys) | **7.68 ms** | modest — 10.7% of GPU kernel time (Geider still 75%) |
+| growth timer (mpp_clock) | 20.1 → **18.1 s** = **4.07×** | A on GPU moved the needle |
+
+**Key finding — A *cannot* fully utilize the GPU, and that's correct/accepted.** Saturating an H100 needs
+~270,000 resident threads; A offers only 16,384 (the columns). The dimension that would fill it (75 depth
+levels) is an **inherently sequential recurrence** (attenuation scan + dynamic mixed-layer boundary) — the
+classic "tall-skinny column" class (cf. tridiagonal / vertical-mixing solves). Forcing full occupancy needs a
+cooperative per-column block-scan rewrite that breaks single-source portability and maintainability — **not
+worth it for a 7.68 ms / 2.6% loop**. We port A for **residency** (remove a CPU island so the whole growth
+block can go single-scope), **not** for A's own speed. Low occupancy here is the expected, accepted outcome.
+
+> **Why this matters for later:** A was a CPU island *in the middle* of the growth block, forcing host↔device
+> bridges around it. With A (and soon B/E/F) on-device, the block can become **one residency scope** — map the
+> growth working set in once, run §1.1→A→Geider→E→§1.3 back-to-back on the device, copy out once — which is
+> what finally removes the per-section transfer tax (§1.1: 5 ms kernel in a 95 ms transfer envelope; §1.3: win
+> eaten by ~110 ms own-scope transfer). Residency ≠ occupancy: it keeps the GPU *busy end-to-end* (no transfer
+> stalls), it does not raise any single kernel's occupancy. This is the on-ramp to the MOM6 RESIDENT endgame
+> (tracers resident across all of COBALT / the timestep).
+
 ## The baseline — TWO pinned cases (correctness vs speed are separated)
 Both builds are the *same source*, no-MPI, single-PE, differing only in how `generic_COBALT.o` is compiled:
 - **CPU build** (`nvhpc-x86-cpu-nompi`): `generic_COBALT.o` CPU-only (`do concurrent`→serial, `!$omp target` ignored), `-O0 -Mnovect -Mnofma -i4 -r8 -byteswapio`. 0 MPI / 0 CUDA symbols.
@@ -215,8 +250,10 @@ Run for **every** section, iterating until it hits its roofline / occupancy ceil
 | C acclimation | 3756 | `do concurrent(k,j,i)` | aggregate only | yes — under-parallelized | ❌ `collapse(3)` pending |
 | §1.2a Geider growth | 3800 | `omp target teams loop collapse(3)` | ✅ within-band PASS (exp/MUFU.RCP, 2–3e-16) | nsys: 272→54 ms (5×); ncu: grid 9,600 / 18.7% occ / 31.8% SM; growth 73.5→23.1 s (**3.18×**) | ◑ reg-capped 18.75% → launch_bounds/split next |
 | §1.3 uptake N/P/Fe/Si | 3924–4009 | 4× `omp target teams loop collapse(3)` | ✅ within-band PASS (Fe `exp`; CPU bit-identical). **Bug caught+fixed:** partial-write outputs were `alloc:` → device garbage (b2b 1e-4 @4×4, crash @128³) → changed to `to:` | nsys: 4 kernels **~5 ms total** (N 2.4/P 1.0/Fe 0.9/Si 0.7); ncu: grid 9,600 / 48–50 regs / **53–60% occ / 75–81% SM** (best-utilized yet); growth 23.1→20.1 s = **3.64×** | ◑ kernels optimal; **own-scope transfer ~110 ms/call** → consolidate (§1.2b step-2) |
-| F mixed-layer avg | 3872 | `do concurrent(j,i,n) local()` | aggregate only | yes — **#1 kernel, ~97% idle** | ❌ |
-| G growth-memory | 3887 | `do concurrent(k,j,i,n)` | aggregate only | partial | ❌ |
+| §1.2b Loop A irradiance (COLUMNAR) | 3639 | `omp target teams loop collapse(2)` over (j,i), k sequential | ✅ within-band PASS (exp+daylength trig; dic ~3 ULP; CPU bit-identical) | nsys: **7.68 ms**; ncu: **grid 128 (16,384 thr) / 6.25% occ / 10.6% SM / 255 regs** — structurally grid-bound (only columns parallel; depth is a recurrence); growth 20.1→18.1 s = **4.07×** | ◑ structurally capped — **NOT a defect**; ported for residency, not speed (see note) |
+| B `f_irr_aclm` relax | ~3760 | pointwise (collapse3) | ⬜ pending | — | ❌ §1.2b remaining |
+| E ML growth-avg (COLUMNAR) | 3884 | columnar (j,i,n) | ⬜ pending — same pattern as A | — | ❌ §1.2b remaining |
+| F `f_mu_mem` relax | 3895 | pointwise (collapse4) | ⬜ pending | — | ❌ §1.2b remaining |
 
 *Ported so far = the growth pathway §1.1+§1.2 ≈ 10% of the 4,000-line reaction network. All rows above
 predate this methodology and must be re-run through the loop from the clean baseline. Remaining big
