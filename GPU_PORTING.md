@@ -191,8 +191,8 @@ handled the one mid-block host write (`mld_aclm`) with a single `target update t
 | **stream syncs** | 95 | **28** | **−70%** ✅ |
 | **HtoD copies / bytes** | 696 / 1.89 GB | **402 / 0.85 GB** | **−42% / −55%** ✅ |
 | DtoH copies / bytes | 141 / 1.50 GB | 137 / **1.45 GB** | ~unchanged ❌ |
-| transfer time | 373 ms | **308 ms** | −17% |
-| growth wall | 17.18 s | 16.62 s | ~flat (−3%) |
+| transfer time (run-variable) | 373 ms | **331 ms** | −11% |
+| growth wall (run-variable) | 17.18 s | 16.62 s | ~flat |
 | b2b | — | **bit-identical** ✅ | correct |
 
 **Key finding (data-flow analysis):** the merge removed the **redundant input re-mapping** (the real waste:
@@ -203,7 +203,7 @@ growth → CPU-downstream BOUNDARY handoff**, not waste — it is **irreducible 
 also ported.** The conservative `from:` was therefore right.
 
 **Leftover for the future (read before optimizing transfer further):**
-1. **The boundary DtoH (~204 ms/call) is the dominant remaining cost and is irreducible within the growth
+1. **The boundary DtoH (~218 ms/call, 1.45 GB — run-variable time, deterministic bytes) is the dominant remaining cost and is irreducible within the growth
    block.** Eliminating it requires the **whole-COBALT residency endgame** — port the downstream sections
    (zoo, production, source/sink, carbon) and extend the resident scope so each output is produced AND
    consumed on-device, pushing the GPU/CPU boundary outward until it disappears. This is the next major phase.
@@ -316,6 +316,11 @@ Run for **every** section, iterating until it hits its roofline / occupancy ceil
   - *Tier 1 (every section, free):* the CPU exe's growth timer (already printed by the speed test) within **±5%** of the pre-change value. NOTE this is the `-O0 -Mnovect` reproducibility build → insensitive to restructuring, catches only **gross** regressions. (Our `!$omp target` directives are pure comments on CPU — 0 host-OpenMP symbols — so the construct change is a CPU no-op; real loop *restructuring* is what this guards.)
   - *Tier 2 (one-time, at the §-block merge — the real test):* build the **original** and the **restructured** source at **`-O2`** and compare the growth timer → certifies the GPU restructure didn't hurt *production* (optimized/vectorized) CPU. `-O2` is **not** bit-identical to the `-O0 -Mnofma` reference (FMA + reassociation legitimately change the last ULP) and we do not require it to be — we only sanity-check the `-O2` result lands **within the round-off band** of the reference (confirms optimization re-rounded, didn't expose a real hazard).
 - [ ] **Tuning analysis** — bottleneck found → lever applied → measured effect → remaining limiter.
+- [ ] **Profiling artifacts ARCHIVED in git** — `/scratch5` auto-purges, so commit the source-of-truth logs
+  (regenerate clean text reports from the `.nsys-rep`/`.ncu-rep`) under `profiling/<section>/` with a
+  `PROVENANCE.md` mapping every reported number → file + re-extract command. Numbers in the PR/doc must be
+  **re-derivable from committed artifacts**, not hand-transcribed from ephemeral logs. (Lesson: two
+  run-mixing slips in §1.2b were only caught by this re-verification — generate tables from logs, don't type them.)
 - [ ] **Status tracker updated** (the table below).
 
 ## Profiling infrastructure
