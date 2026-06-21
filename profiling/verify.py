@@ -102,6 +102,40 @@ def parse_speed(path):
             m = re.search(r'Total runtime\s+\d+\s+([\d.]+)', l); tot.append(float(m.group(1))) if m else None
     return g, tot
 
+def _cellnum(s):
+    m = re.search(r'-?[\d.]+(?:e-?\d+)?', s.replace('−','-'))
+    return float(m.group()) if m else None
+
+def parse_pr_summary(path, namemap):
+    """Parse the numbers straight out of PR_SUMMARY.md's tables/headline -> a structure mirroring CLAIMS.
+    Lets us verify the *document* against CLAIMS (catches PR↔CLAIMS drift), so there's no blind hand-mirror."""
+    txt = open(path).read(); P = {'speed':{}, 'tier2':{}, 'b2b':{}, 'roofline':{}, 'perkernel':{}, 'budget_after':{}}
+    m = re.search(r'CPU\s*([\d.]+)\s*s\s*[→-]+\s*GPU\s*([\d.]+)\s*s\s*=\s*([\d.]+)', txt)
+    if m: P['speed'].update(cpu_growth=float(m[1]), gpu_growth=float(m[2]), speedup=float(m[3]))
+    m = re.search(r'coupled total\s*([\d.]+)\s*[→-]+\s*([\d.]+)\s*s', txt)
+    if m: P['speed'].update(cpu_total=float(m[1]), gpu_total=float(m[2]))
+    m = re.search(r'restructured\s*\**([\d.]+)\s*s\**\s*vs\s*pristine\s*\**([\d.]+)', txt)
+    if m: P['tier2'] = dict(restr=float(m[1]), prist=float(m[2]))
+    for l in txt.split('\n'):
+        if not l.lstrip().startswith('|'): continue
+        c = [x.strip() for x in l.strip().strip('|').split('|')]
+        if len(c) == 10 and c[0] in namemap:                       # §3b per-kernel row
+            occ = c[4].split('/')
+            P['perkernel'][namemap[c[0]]] = (_cellnum(c[1]),_cellnum(c[2]),_cellnum(c[3]),
+                _cellnum(occ[0]),_cellnum(occ[1]),_cellnum(c[5]),_cellnum(c[6]),_cellnum(c[7]),_cellnum(c[8]))
+        elif len(c) == 3 and 'FLOP/B' in c[1] and c[0] in ('§1.1','A','B'):   # §3c roofline row
+            P['roofline'][c[0]] = (_cellnum(c[1]), _cellnum(c[2]))
+        elif len(c) == 4 and c[0] in ('dic','alk','no3','po4','o2'):          # §2 b2b row
+            P['b2b'][c[0]] = (_cellnum(c[1]), _cellnum(c[2]))
+        elif len(c) == 4:                                                     # §3a budget row (after = col index 2)
+            k = c[0].lower()
+            if 'kernel compute' in k: P['budget_after']['kern'] = _cellnum(c[2])
+            elif 'stream syncs' in k: P['budget_after']['sync'] = _cellnum(c[2])
+            elif 'transfer time' in k: P['budget_after']['xfer_ms'] = _cellnum(c[2])
+            elif 'htod' in k: a=c[2].split('/'); P['budget_after']['htod_n']=_cellnum(a[0]); P['budget_after']['htod_gb']=_cellnum(a[1])
+            elif 'dtoh' in k: a=c[2].split('/'); P['budget_after']['dtoh_n']=_cellnum(a[0]); P['budget_after']['dtoh_gb']=_cellnum(a[1])
+    return P
+
 def chk(label, claim, got, tol=0.03, abstol=0.0):
     # pass if within relative tol OR absolute abstol (abstol handles near-zero %, where rel tol is meaningless)
     try: ok = abs(float(claim)-float(got)) <= max(tol*abs(float(claim)), abstol)
@@ -112,6 +146,8 @@ def chk(label, claim, got, tol=0.03, abstol=0.0):
 # ============================ PER-PR DATA (edit this block for each section) ============================
 F2S = {'3509':'§1.1','3639':'A','3733':'B','3775':'Geider','3857':'E','3872':'F',
        '3892':'§1.3N','3930':'§1.3P','3955':'§1.3Fe','3977':'§1.3Si'}  # merged-build F1L -> section
+PR_NAMEMAP = {'§1.1':'§1.1','A irradiance':'A','B relax':'B','Geider':'Geider','E ML-avg':'E','F relax':'F',
+              '§1.3 N':'§1.3N','§1.3 P':'§1.3P','§1.3 Fe':'§1.3Fe','§1.3 Si':'§1.3Si'}  # PR table col-1 -> section
 
 CLAIMS = {
  'speed':   dict(cpu_growth=72.0, gpu_growth=16.6, speedup=4.33, cpu_total=612, gpu_total=572),
@@ -191,9 +227,31 @@ def main():
         track(chk(f"{sec} AI", ai, R[sec][0], 0.03), f"{sec}.AI")
         track(chk(f"{sec} GFLOP/s", gf, R[sec][1], 0.06), f"{sec}.GF")
 
+    print("\n================= PHASE B: PR_SUMMARY.md ↔ CLAIMS (document matches verified values) =================")
+    prs = F('PR_SUMMARY.md')
+    if os.path.exists(prs):
+        P = parse_pr_summary(prs, PR_NAMEMAP)
+        for k, v in CLAIMS['speed'].items():    track(chk(f"PR speed.{k}", v, P['speed'].get(k,-9), 0.02), f"PR.speed.{k}")
+        for k, v in CLAIMS['tier2'].items():    track(chk(f"PR tier2.{k}", v, P['tier2'].get(k,-9), 0.02), f"PR.tier2.{k}")
+        for t,(g,b) in CLAIMS['b2b'].items():
+            track(chk(f"PR b2b {t} gref", g, P['b2b'].get(t,(-9,-9))[0], 0.05), f"PR.b2b.{t}")
+            track(chk(f"PR b2b {t} band", b, P['b2b'].get(t,(-9,-9))[1], 0.02), f"PR.b2b.{t}.band")
+        for k, v in CLAIMS['budget_after'].items():
+            track(chk(f"PR budget.{k}", v, P['budget_after'].get(k,-9), 0.02, 0.1 if 'gb' in k else 0.0), f"PR.budget.{k}")
+        ck = ['time','grid','regs','ach','theo','sm','dram','ipc','warp']
+        for sec, vals in CLAIMS['perkernel'].items():
+            row = P['perkernel'].get(sec, [-9]*9)
+            for i, (c, pr) in enumerate(zip(ck, vals)):
+                track(chk(f"PR {sec}.{c}", pr, row[i], 0.02, 0.1 if c=='dram' else 0.0), f"PR.{sec}.{c}")
+        for sec,(ai,gf) in CLAIMS['roofline'].items():
+            track(chk(f"PR {sec} AI", ai, P['roofline'].get(sec,(-9,-9))[0], 0.02), f"PR.{sec}.AI")
+            track(chk(f"PR {sec} GFLOP/s", gf, P['roofline'].get(sec,(-9,-9))[1], 0.02), f"PR.{sec}.GF")
+    else:
+        print("  (no PR_SUMMARY.md in archive dir — skipping document check)")
+
     print("\n================================ RESULT ================================")
     if fails: print(f"  *** {len(fails)} MISMATCH(es): {fails}"); sys.exit(1)
-    print("  ALL CLAIMS MATCH THE ARCHIVE ✓"); sys.exit(0)
+    print("  ALL CLAIMS MATCH THE ARCHIVE *and* PR_SUMMARY.md ✓  (CLAIMS↔archive AND PR↔CLAIMS)"); sys.exit(0)
 
 if __name__ == '__main__':
     main()
