@@ -34,16 +34,21 @@ surface loop) → **b2b gate** (CPU bit-identical to ref; GPU within round-off) 
 Bridges: `mld_aclm` (host MLD), `f_nh3` (host nh3-island diagnostic → device), `vmove` (device → host for
 `g_tracer_set_values`). The nh3 diagnostic stays a CPU island.
 
-## 2. Correctness (b2b) — bit-faithful at every step
-4×4×75, 48 hr, GPU vs cpu reference; PASS = within `max(4×band, 1e-13)`. Identical across all 4 ports + all 4
-merge steps:
-| tracer | \|GPU−ref\|/ref | band | verdict |
+## 2. Correctness (b2b) — bit-faithful at every step + comprehensive 17-tracer gate
+4×4×75, 48 hr, GPU vs cpu reference (CPU = Tier-1 bit-identical to pristine). The per-step gate (5 tracers,
+within `max(4×band,1e-13)`) PASSED identically across all 4 ports + all 4 merge steps. A final **comprehensive
+17-tracer b2b** then confirmed bit-faithfulness across **every foodweb currency** (not just C/N/P/O/alk):
+| cycle | tracers | max \|GPU−CPU\|/\|CPU\| | verdict |
 |---|---|---|---|
-| dic | 1.30e-16 | 3.9e-16 | PASS |
-| alk | 3.60e-16 | 4.8e-16 | PASS |
-| no3 | 0.00 | 2.7e-16 | PASS |
-| po4 | 2.53e-16 | 6.3e-16 | PASS |
-| o2 | 1.45e-16 | 1.0e-15 | PASS |
+| carbon / N / P / O / alkalinity | dic, alk, no3, po4, o2 | 3.6e-16 | PASS |
+| silica | sio4 | 1.4e-16 | PASS |
+| dissolved iron | fed | 1.6e-16 | PASS |
+| phytoplankton biomass | ndi, nlg, nmd, nsm | 2.9e-14 | PASS |
+| zooplankton biomass | nsmz, nmdz, nlgz | 2.8e-15 | PASS |
+| bacteria / detritus / labile DOM | nbact, ndet, ldon | 4.1e-15 | PASS |
+
+All 17 within round-off (max 2.9e-14 ≪ 1e-13 tol). This exercises the silica/iron cycles and all biomass/
+detritus/DOM pools that the 5-tracer gate only covered indirectly. (`s2_consolidation/b2b_17tracer_full.txt`)
 
 ## 3. Performance (128³, 12 steps, H100 NVL)
 ### 3a. Per-section speedup (mpp_clock, CPU vs GPU)
