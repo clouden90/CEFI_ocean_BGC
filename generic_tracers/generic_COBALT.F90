@@ -4029,10 +4029,25 @@ contains
 !---------------------------------------------------------------------------
 !
     call mpp_clock_begin(id_clock_bacteria_growth)
+    ! === GPU §2 bacteria growth: three pointwise collapse(3) kernels in ONE residency scope (anammox,
+    !     nitrification, bacterial production). No shared scratch. Loop2 references the namelist module var
+    !     scheme_nitrif -> firstprivate (uniform scalar). Loop3 uses host scalar vmax_bact -> firstprivate,
+    !     and per-cell bact_uptake_ratio -> private. Has exp + ** (pow) -> b2b WITHIN-BAND. Accumulators
+    !     cobalt%jo2resp_wc/jprod_nh4/jprod_po4/jno3denit_wc carry growth values (+=) -> map(to:) AND from:;
+    !     fresh outputs -> alloc:/from:. f_nh3 is the CPU nh3-island diagnostic (host-resident input). mem:separate.
+    !$omp target enter data map(to: cobalt, phyto, bact, Temp)
+    !$omp target enter data map(to: cobalt%f_o2,cobalt%f_no3,cobalt%f_nh4,cobalt%f_nh3,cobalt%f_irr_aclm, &
+    !$omp&   cobalt%expkT,cobalt%f_ldon,cobalt%f_ldop,phyto(SMALL)%nh4lim,bact(1)%f_n)
+    !$omp target enter data map(to: cobalt%jo2resp_wc,cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jno3denit_wc)
+    !$omp target enter data map(alloc: cobalt%juptake_nh4amx,cobalt%juptake_no3amx,cobalt%jnamx, &
+    !$omp&   cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif)
+    !$omp target enter data map(alloc: bact(1)%temp_lim,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim, &
+    !$omp&   bact(1)%juptake_ldon,bact(1)%juptake_ldop,bact(1)%jprod_n,bact(1)%jprod_nh4,bact(1)%jprod_po4)
 
     ! Anammox converts NH4+ to N2 using NO3- in low O2 environments.
     ! This was not included in ESM4.1 and gamma_nh4amx is currently 0.0
     ! by default.
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
 
        if (cobalt%f_o2(i,j,k) .lt. cobalt%o2_max_amx) then !{
@@ -4060,6 +4075,7 @@ contains
     !  ammonia (NH3).  Scheme 1 is from COBALTv1.  Note that the acclimation irradiance, which reflects
     !  the irradiance during daylight hours, has been used to impose nitrification photoinhibition.
     !
+    !$omp target teams loop collapse(3) firstprivate(scheme_nitrif)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        cobalt%juptake_nh4nitrif(i,j,k) = 0.0
        if (scheme_nitrif .eq. 2 .or. scheme_nitrif .eq. 3) then
@@ -4094,6 +4110,7 @@ contains
     ! back calculate an effective maximum ldon uptake rate (at 0 deg. C) for bacteria, i.e.:
     ! mu_max = gge_max*vmax - bresp; so (vmax = mu_max+bresp)/gge_max
     vmax_bact = (1.0/bact(1)%gge_max)*(bact(1)%mu_max + bact(1)%bresp)
+    !$omp target teams loop collapse(3) private(bact_uptake_ratio) firstprivate(vmax_bact)
     do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec   !{
        !
        ! Calculate the growth rate of heterotrophic bacteria (bact%mu)
@@ -4139,6 +4156,14 @@ contains
        bact(1)%jprod_po4(i,j,k) = bact(1)%juptake_ldop(i,j,k) - max(bact(1)%jprod_n(i,j,k)*bact(1)%q_p_2_n,0.0)
        cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) + bact(1)%jprod_po4(i,j,k)
     enddo; enddo ; enddo !} i,j,k
+    ! === GPU §2 bacteria MERGE-out: outputs + accumulators back to host; release the scope ===
+    !$omp target exit data map(from: cobalt%juptake_nh4amx,cobalt%juptake_no3amx,cobalt%jnamx, &
+    !$omp&   cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif,cobalt%jo2resp_wc,cobalt%jprod_nh4, &
+    !$omp&   cobalt%jprod_po4,cobalt%jno3denit_wc)
+    !$omp target exit data map(from: bact(1)%temp_lim,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim, &
+    !$omp&   bact(1)%juptake_ldon,bact(1)%juptake_ldop,bact(1)%jprod_n,bact(1)%jprod_nh4,bact(1)%jprod_po4)
+    !$omp target exit data map(delete: cobalt%f_o2,cobalt%f_no3,cobalt%f_nh4,cobalt%f_nh3,cobalt%f_irr_aclm, &
+    !$omp&   cobalt%expkT,cobalt%f_ldon,cobalt%f_ldop,phyto(SMALL)%nh4lim,bact(1)%f_n,Temp,cobalt,phyto,bact)
 !
     call mpp_clock_end(id_clock_bacteria_growth)
 !

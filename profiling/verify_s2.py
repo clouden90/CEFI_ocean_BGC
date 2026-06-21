@@ -101,9 +101,26 @@ def verify(C):
         print(f"  [{'OK ' if ok else 'XX!'}] b2b {tr} (val+PASS)          claim={claim:<12g} archive={got} pass={a[2] if a else None}")
         if not ok: fails.append(f"b2b {tr}")
 
+BACT = {
+  "dir": "s2_bacteria",
+  "speed": {"bacteria growth": (1.34, 0.46, 2.88)},
+  "kernels": [{"tag": "bact-amx", "Grid Size": 9600, "Registers Per Thread": 48,
+               "Achieved Occupancy": 58.97, "Theoretical Occupancy": 62.50,
+               "Compute (SM) Throughput": 79.04, "DRAM Throughput": 2.30, "Executed Ipc Active": 1.90},
+              {"tag": "bact-nitrif", "Grid Size": 9600, "Registers Per Thread": 64,
+               "Achieved Occupancy": 48.56, "Theoretical Occupancy": 50.00,
+               "Compute (SM) Throughput": 68.07, "DRAM Throughput": 2.73, "Executed Ipc Active": 1.71},
+              {"tag": "bact-prod", "Grid Size": 9600, "Registers Per Thread": 90,
+               "Achieved Occupancy": 31.09, "Theoretical Occupancy": 31.25,
+               "Compute (SM) Throughput": 49.41, "DRAM Throughput": 2.33, "Executed Ipc Active": 1.16}],
+  "roofline": {"bact-prod": (None, None)},
+  "b2b": {"dic": 1.30e-16, "alk": 3.60e-16, "no3": 0.0, "po4": 2.53e-16, "o2": 1.45e-16},
+}
+
 verify(PROD)
 verify(ZOO)
 verify(LOSSES)
+verify(BACT)
 print("\n================================ RESULT ================================")
 if fails: print(f"  *** {len(fails)} MISMATCH(es): {fails}"); sys.exit(1)
 print("  ALL §2 REPORTED METRICS MATCH THE COMMITTED ARCHIVE ✓"); sys.exit(0)

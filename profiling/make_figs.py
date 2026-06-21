@@ -26,12 +26,14 @@ import matplotlib.pyplot as plt
 SECTION_MAP = {
     "F1L3510": "§1.1", "F1L3640": "A", "F1L3734": "B", "F1L3776": "Geider",
     "F1L3858": "E", "F1L3873": "F", "F1L3893": "§1.3N", "F1L3931": "§1.3P",
-    "F1L3956": "§1.3Fe", "F1L3978": "§1.3Si", "F1L4278": "zoo", "F1L4593": "losses", "F1L4704": "losses2D",
+    "F1L3956": "§1.3Fe", "F1L3978": "§1.3Si", "F1L4050": "bact-amx", "F1L4078": "bact-nitrif", "F1L4113": "bact-prod",
+    "F1L4278": "zoo", "F1L4303": "zoo", "F1L4593": "losses", "F1L4618": "losses",
+    "F1L4704": "losses2D", "F1L4729": "losses2D",
     # production's directive line shifts as ports add code above it; keep all aliases so every
     # archive's CSV (profiled at its line of the day) still resolves: §2 prod=F1L4707, post-zoo=F1L4748
-    "F1L4707": "production", "F1L4748": "production", "F1L4780": "production",
+    "F1L4707": "production", "F1L4748": "production", "F1L4780": "production", "F1L4805": "production",
 }
-HIGHLIGHT = "losses"                # the kernel this PR adds (cosmetic: which SOL bar is red)
+HIGHLIGHT = "bact-prod"                # the kernel this PR adds (cosmetic: which SOL bar is red)
 # A section is "ported" iff its GPU time is well below CPU. INFERRED FROM THE DATA (not a global list) so
 # each archive's figure reflects ITS OWN era — e.g. s2_production's fig correctly shows zoo as un-ported,
 # while s2_zoo's shows it ported. Ported sections run 4-8x (ratio ~0.1-0.25); un-ported are flat/slower (~1+).
@@ -97,7 +99,7 @@ def parse_roof(path):
 def parse_speed(path):
     """06_speed.txt -> {section: (cpu_s, gpu_s)} from the mpp_clock rows."""
     txt = open(path).read()
-    secs = ["carbon", "phytoplankton growth", "zooplankton", "other losses", "production loop"]
+    secs = ["carbon", "phytoplankton growth", "bacteria growth", "zooplankton", "other losses", "production loop"]
     out = {}
     for s in secs:
         # section label, then any text (" calcs)", " ca", ...), then the count int, then the first time
@@ -134,7 +136,9 @@ def fig_speed(speed, outdir):
     p = os.path.join(outdir, "fig_speed_beforeafter.png"); fig.savefig(p, dpi=130); plt.close(fig); return p
 
 def fig_sol(det, outdir):
-    order = [t for t in SECTION_MAP.values() if t in det]
+    order = []  # dedup: SECTION_MAP has multiple F1L aliases -> same tag; keep launch order, no repeat bars
+    for t in SECTION_MAP.values():
+        if t in det and t not in order: order.append(t)
     sm   = [det[t].get("Compute (SM) Throughput", 0) for t in order]
     dram = [det[t].get("DRAM Throughput", 0) for t in order]
     x = range(len(order)); w = 0.38

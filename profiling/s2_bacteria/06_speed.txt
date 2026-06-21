@@ -1,0 +1,16 @@
+===== SPEED §2 bacteria (all sections): 128x128x75, 12 steps, CPU vs GPU =====
+    [cpu] Total runtime                            1    614.320261    614.320261    614.320261      0.000000  1.000     0     0     0
+    [cpu] (Cobalt: carbon calcs)                  12     40.970293     40.970293     40.970293      0.000000  0.067    31     0     0
+    [cpu] (Cobalt: phytoplankton growth ca        12     72.742380     72.742380     72.742380      0.000000  0.118    31     0     0
+    [cpu] (Cobalt: bacteria growth calcs)         12      1.338420      1.338420      1.338420      0.000000  0.002    31     0     0
+    [cpu] (Cobalt: zooplankton calculation        12     14.647642     14.647642     14.647642      0.000000  0.024    31     0     0
+    [cpu] (Cobalt: other losses)                  12     11.655113     11.655113     11.655113      0.000000  0.019    31     0     0
+    [cpu] (Cobalt: production loop)               12     16.421683     16.421683     16.421683      0.000000  0.027    31     0     0
+    [gpu] Total runtime                            1    527.382636    527.382636    527.382636      0.000000  1.000     0     0     0
+    [gpu] (Cobalt: carbon calcs)                  12     39.925814     39.925814     39.925814      0.000000  0.076    31     0     0
+    [gpu] (Cobalt: phytoplankton growth ca        12     16.379079     16.379079     16.379079      0.000000  0.031    31     0     0
+    [gpu] (Cobalt: bacteria growth calcs)         12      0.464746      0.464746      0.464746      0.000000  0.001    31     0     0
+    [gpu] (Cobalt: zooplankton calculation        12      1.736948      1.736948      1.736948      0.000000  0.003    31     0     0
+    [gpu] (Cobalt: other losses)                  12      2.990512      2.990512      2.990512      0.000000  0.006    31     0     0
+    [gpu] (Cobalt: production loop)               12      2.071304      2.071304      2.071304      0.000000  0.004    31     0     0
+===== bacteria growth: CPU=1.34s  GPU=0.46s  speedup=2.88x =====
