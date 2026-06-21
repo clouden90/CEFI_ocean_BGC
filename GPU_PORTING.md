@@ -212,6 +212,24 @@ also ported.** The conservative `from:` was therefore right.
 3. HtoD is still 402 copies/0.85 GB — the once-each input map of ~150 derived-type component arrays
    (deep-copy overhead). Further reduction would need flattening derived types (large refactor, low ROI now).
 
+### §1.2b CPU no-regression — the single source must not hurt the CPU build (both tiers PASS)
+- **Tier-1 (`-O0` reproducibility build, every section):** the speed test's CPU growth timer stayed flat at
+  **~72–73 s** across §1.1→merge (within ±5%) → no gross regression. (Low-information by design: `-O0 -Mnovect`
+  is insensitive to restructuring; the `!$omp target` directives are pure comments on CPU — 0 host-OpenMP
+  symbols — so the construct change is a CPU no-op.)
+- **Tier-2 (`-O2` optimized CPU, restructured vs pristine pre-GPU, 128³/12-step):** **PASS** — COBALT growth
+  `-O2`: **restructured 76.6 s vs pristine 74.9 s = +2.2%, within run-to-run noise** (n=1; the timer varies
+  ~±1–2 s) → **no meaningful optimized-CPU regression** from the restructuring.
+  - **Method (object-swap):** a *whole-model* `-O2` build CRASHES at startup — **nvfortran `-O2` miscompiles the
+    FMS namelist/table parser** (`FATAL: get_variable_line … %CON`), and *both* restructured and pristine fail
+    identically → it's an FMS/`-O2` compiler bug, **unrelated to the COBALT port** (likely why production avoids
+    whole-model `-O2`). Worked around by compiling **only `generic_COBALT.o` at `-O2`** and relinking against
+    the `-O0` FMS (no parser bug), preserving the `-O0` b2b reference untouched. The restructured COBALT *itself*
+    compiles cleanly at `-O2`.
+  - **Finding: `-O2` ≈ `-O0` for the growth block** (~75 vs ~73 s) — these loops do **not** vectorize
+    (derived-type access + transcendentals + columnar recurrences), so the `-O0` reproducibility build costs
+    essentially nothing in CPU performance for this code.
+
 ## The baseline — TWO pinned cases (correctness vs speed are separated)
 Both builds are the *same source*, no-MPI, single-PE, differing only in how `generic_COBALT.o` is compiled:
 - **CPU build** (`nvhpc-x86-cpu-nompi`): `generic_COBALT.o` CPU-only (`do concurrent`→serial, `!$omp target` ignored), `-O0 -Mnovect -Mnofma -i4 -r8 -byteswapio`. 0 MPI / 0 CUDA symbols.
