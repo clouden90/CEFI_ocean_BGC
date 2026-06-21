@@ -1,0 +1,14 @@
+===== SPEED §2 zooplankton (rebuilt with all sections): 128x128x75, 12 steps, CPU vs GPU =====
+    [cpu] Total runtime                            1    613.149392    613.149392    613.149392      0.000000  1.000     0     0     0
+    [cpu] (Cobalt: carbon calcs)                  12     41.226911     41.226911     41.226911      0.000000  0.067    31     0     0
+    [cpu] (Cobalt: phytoplankton growth ca        12     72.233974     72.233974     72.233974      0.000000  0.118    31     0     0
+    [cpu] (Cobalt: zooplankton calculation        12     14.578877     14.578877     14.578877      0.000000  0.024    31     0     0
+    [cpu] (Cobalt: other losses)                  12     11.641033     11.641033     11.641033      0.000000  0.019    31     0     0
+    [cpu] (Cobalt: production loop)               12     16.350419     16.350419     16.350419      0.000000  0.027    31     0     0
+    [gpu] Total runtime                            1    541.504718    541.504718    541.504718      0.000000  1.000     0     0     0
+    [gpu] (Cobalt: carbon calcs)                  12     40.635412     40.635412     40.635412      0.000000  0.075    31     0     0
+    [gpu] (Cobalt: phytoplankton growth ca        12     16.398715     16.398715     16.398715      0.000000  0.030    31     0     0
+    [gpu] (Cobalt: zooplankton calculation        12      1.742605      1.742605      1.742605      0.000000  0.003    31     0     0
+    [gpu] (Cobalt: other losses)                  12     13.359543     13.359543     13.359543      0.000000  0.025    31     0     0
+    [gpu] (Cobalt: production loop)               12      2.217375      2.217375      2.217375      0.000000  0.004    31     0     0
+===== zooplankton calculation: CPU=14.58s  GPU=1.74s  speedup=8.37x =====

@@ -1,0 +1,30 @@
+===== (A) MERGED step2 (whole-foodweb) transfer budget (nsys 1-step = 2 calls; /2 per-call) =====
+Sun Jun 21 18:29:57 UTC 2026
+nsys rc=0
+##### mem_size_sum #####
+ Total (MB)  Count  Avg (MB)  Med (MB)  Min (MB)  Max (MB)  StdDev (MB)           Operation          
+ ----------  -----  --------  --------  --------  --------  -----------  ----------------------------
+   7024.806    656    10.709    10.774     0.066    10.774        0.831  [CUDA memcpy Device-to-Host]
+   2327.849   1694     1.374     0.000     0.000    32.321        3.704  [CUDA memcpy Host-to-Device]
+##### cuda_api_sum (syncs) #####
+ Time (%)  Total Time (ns)  Num Calls   Avg (ns)    Med (ns)   Min (ns)  Max (ns)  StdDev (ns)          Name        
+     13.3        320083540        122   2623635.6      5765.0      1380  54409333    8786950.5  cuStreamSynchronize 
+
+===== (B) SPEED: CPU vs GPU 12-step (focus losses+production) =====
+  cpu wall=621s exit=0
+    [cpu] Total runtime                            1    620.661389    620.661389    620.661389      0.000000  1.000     0     0     0
+    [cpu] (Cobalt: carbon calcs)                  12     41.058331     41.058331     41.058331      0.000000  0.066    31     0     0
+    [cpu] (Cobalt: phytoplankton growth ca        12     72.752044     72.752044     72.752044      0.000000  0.117    31     0     0
+    [cpu] (Cobalt: bacteria growth calcs)         12      1.320383      1.320383      1.320383      0.000000  0.002    31     0     0
+    [cpu] (Cobalt: zooplankton calculation        12     14.477493     14.477493     14.477493      0.000000  0.023    31     0     0
+    [cpu] (Cobalt: other losses)                  12     11.891322     11.891322     11.891322      0.000000  0.019    31     0     0
+    [cpu] (Cobalt: production loop)               12     16.229395     16.229395     16.229395      0.000000  0.026    31     0     0
+  gpu wall=529s exit=0
+    [gpu] Total runtime                            1    528.272631    528.272631    528.272631      0.000000  1.000     0     0     0
+    [gpu] (Cobalt: carbon calcs)                  12     40.331298     40.331298     40.331298      0.000000  0.076    31     0     0
+    [gpu] (Cobalt: phytoplankton growth ca        12     13.880595     13.880595     13.880595      0.000000  0.026    31     0     0
+    [gpu] (Cobalt: bacteria growth calcs)         12      0.024898      0.024898      0.024898      0.000000  0.000    31     0     0
+    [gpu] (Cobalt: zooplankton calculation        12      0.344714      0.344714      0.344714      0.000000  0.001    31     0     0
+    [gpu] (Cobalt: other losses)                  12      1.274512      1.274512      1.274512      0.000000  0.002    31     0     0
+    [gpu] (Cobalt: production loop)               12      6.146937      6.146937      6.146937      0.000000  0.012    31     0     0
+==== DONE Sun Jun 21 18:51:12 UTC 2026 ====

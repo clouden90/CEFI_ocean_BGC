@@ -1,0 +1,12 @@
+[cur] exit=0
+    (Cobalt: phytoplankton growth ca        12     72.797715     72.797715     72.797715      0.000000  0.118    31     0     0
+    (Cobalt: bacteria growth calcs)         12      1.334995      1.334995      1.334995      0.000000  0.002    31     0     0
+[prist] exit=0
+    (Cobalt: phytoplankton growth ca        12     73.495030     73.495030     73.495030      0.000000  0.119    31     0     0
+    (Cobalt: bacteria growth calcs)         12      1.342928      1.342928      1.342928      0.000000  0.002    31     0     0
+COBALT-only -O2 growth: restructured=12s  pristine=12s
+===== Tier-2 -O2 CPU: restructured(§2) vs pristine(pre-§2) per ported section =====
+  section                   restr(s)  prist(s)    delta
+  zooplankton calc             14.87     14.56    +2.1%
+  other losses                 11.74     11.43    +2.7%
+  production loop              16.86     16.67    +1.2%
