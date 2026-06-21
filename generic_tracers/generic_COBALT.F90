@@ -3632,7 +3632,7 @@ contains
     !         pcmlim_ML(NUM_PHYTO) (was phyto%tmp_pcmlim_aclm_ML accumulator -> would race), sfc_irr_loc, kbl;
     !       - day_of_year()/rev_angle/dec_angle/frac hoisted out (constant per call; no call inside kernel);
     !       - (1:kblt) array-section writes -> explicit do k=1,kbl loop.
-    !     Has exp + daylength trig -> b2b WITHIN-BAND (not bit-identical). Own scope (merge later). ===
+    !     Has exp + daylength trig -> b2b WITHIN-BAND (not bit-identical). Resident in the merged growth-block scope. ===
     frac_sfc_irrad_aclm = 1.0/(2.71828**cobalt%ml_aclm_efold) ! controls acclimation in deep mixed layers
     yearday = day_of_year(model_time)
     rev_angle = 0.2163108 + 2.0*atan(0.9671396*tan(0.00860*(real(yearday,8) - 186.0)))
