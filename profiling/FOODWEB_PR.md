@@ -99,8 +99,12 @@ All latency-bound (low DRAM%, well below FP64/HBM roofs) — consistent with §1
    the necessary groundwork + max HtoD + clean one-region architecture; the wall win is the next phase.
 
 ## 6. Next steps
-1. **Port source/sink + diagnostics** — now a trivial extension of the single region: their inputs (the foodweb
-   outputs) are already resident, so the ~3.5 GB DtoH **collapses** → the wall finally moves.
+1. **Port source/sink + diagnostics** — the natural next extension that finally moves the wall: source/sink
+   consumes the resident foodweb outputs (`cobalt%jprod_cadet/ndet/fedet`, `zoo%jprod_n`, …) and is pure
+   arithmetic (→ bit-identical), so extending the region keeps those outputs resident and **collapses the
+   ~3.5 GB DtoH**. Note this is substantial work, not a trivial edit: source/sink has ~45 host `g_tracer_set/get`
+   calls and the diagnostics section is ~930 lines with ~43 diag-sends — those host interactions need careful
+   bridge/island handling (diagnostics especially). The DtoH *payoff* is simple to reason about; the *port* is not.
 2. **Carbon chemistry** (iterative pH/CO₂ Newton solver) — the hardest piece, dedicated later effort.
 3. **Optional kernel tunes** (backlog): zoo register-cap (firstprivate spills), the §1.2b A/E/Geider items.
 
