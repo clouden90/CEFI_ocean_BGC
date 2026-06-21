@@ -4251,7 +4251,33 @@ contains
     !
     ! Main loop for calculating predation by zooplankton and higher predators
     !
-
+    ! === GPU §2 zooplankton: pointwise predation over (i,j,k) -> omp target teams loop collapse(3).
+    !     The pre-loop above (ipa_matrix, static prey_*2n_vec, ingest_matrix=0, hp_ingest_vec=0) runs ONCE on
+    !     HOST; its results flow into the kernel via firstprivate (each thread gets an initialized copy).
+    !     CRITICAL: ipa_matrix/hp_ipa_vec/prey_*2n_vec/ingest_matrix/hp_ingest_vec are per-thread scratch that
+    !     RELY on that pre-loop init (e.g. ingest_matrix(3,4) is read at L4438 but never set for m=3 -> needs the
+    !     pre-loop 0) -> firstprivate (NOT private, which would be garbage). prey_vec/pa_matrix/hp_pa_vec/tot_prey/
+    !     tot_prey_hp/food1/food2/sw_fac_denom are fully recomputed per cell -> private. Has exp + ** (pow) ->
+    !     b2b WITHIN-BAND. Own residency scope (merge later). Outputs are per-cell (not accumulators) -> alloc:/from:.
+    !$omp target enter data map(to: cobalt, zoo, phyto, bact, Temp)
+    !$omp target enter data map(to: cobalt%f_o2,cobalt%f_ndet,cobalt%f_ndet_fast,cobalt%f_pdet,cobalt%f_pdet_fast, &
+    !$omp&   cobalt%f_fedet,cobalt%f_sidet)
+    !$omp target enter data map(alloc: cobalt%hp_temp_lim,cobalt%hp_o2lim,cobalt%hp_jingest_n,cobalt%hp_jingest_p, &
+    !$omp&   cobalt%total_filter_feeding)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%f_n,phyto(n)%q_p_2_n,phyto(n)%q_fe_2_n,phyto(n)%q_si_2_n)
+      !$omp target enter data map(alloc: phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2)
+    enddo
+    do m = 1,NUM_ZOO
+      !$omp target enter data map(to: zoo(m)%f_n)
+      !$omp target enter data map(alloc: zoo(m)%temp_lim,zoo(m)%o2lim,zoo(m)%jingest_n,zoo(m)%jingest_p, &
+      !$omp&   zoo(m)%jingest_fe,zoo(m)%jingest_sio2,zoo(m)%jzloss_n,zoo(m)%jzloss_p,zoo(m)%jhploss_n,zoo(m)%jhploss_p)
+    enddo
+    !$omp target enter data map(to: bact(1)%f_n)
+    !$omp target enter data map(alloc: bact(1)%jzloss_n,bact(1)%jzloss_p)
+    !$omp target teams loop collapse(3) &
+    !$omp&   firstprivate(ipa_matrix,hp_ipa_vec,prey_p2n_vec,prey_fe2n_vec,prey_si2n_vec,ingest_matrix,hp_ingest_vec) &
+    !$omp&   private(m,n,prey_vec,pa_matrix,hp_pa_vec,tot_prey,tot_prey_hp,food1,food2,sw_fac_denom)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec; !{
 
        !
@@ -4523,6 +4549,21 @@ contains
        enddo !} n
 
     enddo; enddo; enddo  !} i,j,k
+    ! === GPU §2 zooplankton MERGE-out: per-cell outputs back to host; release the scope ===
+    !$omp target exit data map(from: cobalt%hp_temp_lim,cobalt%hp_o2lim,cobalt%hp_jingest_n,cobalt%hp_jingest_p, &
+    !$omp&   cobalt%total_filter_feeding)
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2)
+      !$omp target exit data map(delete: phyto(n)%f_n,phyto(n)%q_p_2_n,phyto(n)%q_fe_2_n,phyto(n)%q_si_2_n)
+    enddo
+    do m = 1,NUM_ZOO
+      !$omp target exit data map(from: zoo(m)%temp_lim,zoo(m)%o2lim,zoo(m)%jingest_n,zoo(m)%jingest_p, &
+      !$omp&   zoo(m)%jingest_fe,zoo(m)%jingest_sio2,zoo(m)%jzloss_n,zoo(m)%jzloss_p,zoo(m)%jhploss_n,zoo(m)%jhploss_p)
+      !$omp target exit data map(delete: zoo(m)%f_n)
+    enddo
+    !$omp target exit data map(from: bact(1)%jzloss_n,bact(1)%jzloss_p)
+    !$omp target exit data map(delete: bact(1)%f_n,cobalt%f_o2,cobalt%f_ndet,cobalt%f_ndet_fast,cobalt%f_pdet, &
+    !$omp&   cobalt%f_pdet_fast,cobalt%f_fedet,cobalt%f_sidet,Temp,cobalt,zoo,phyto,bact)
     call mpp_clock_end(id_clock_zooplankton_calculations)
 
     !

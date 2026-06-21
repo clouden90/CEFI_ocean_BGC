@@ -22,16 +22,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# ---- per-PR config: F1L<line> -> short label, in launch order ----
+# ---- per-PR config: F1L<line> -> short label, in launch order (line #s shift as ports add code) ----
 SECTION_MAP = {
     "F1L3510": "§1.1", "F1L3640": "A", "F1L3734": "B", "F1L3776": "Geider",
     "F1L3858": "E", "F1L3873": "F", "F1L3893": "§1.3N", "F1L3931": "§1.3P",
-    "F1L3956": "§1.3Fe", "F1L3978": "§1.3Si", "F1L4707": "production",
+    "F1L3956": "§1.3Fe", "F1L3978": "§1.3Si", "F1L4278": "zoo",
+    # production's directive line shifts as ports add code above it; keep all aliases so every
+    # archive's CSV (profiled at its line of the day) still resolves: §2 prod=F1L4707, post-zoo=F1L4748
+    "F1L4707": "production", "F1L4748": "production",
 }
-HIGHLIGHT = "production"          # the kernel this PR adds
-# Which mpp_clock sections are ON GPU so far (grows by one PR each port).
+HIGHLIGHT = "zoo"                # the kernel this PR adds
+# Which mpp_clock sections are ON GPU so far (grows by one PR each port). Names match parse_speed's keys.
 # Un-ported sections still run on CPU in the GPU build -> expected flat/slower, NOT a win.
-PORTED_SECTIONS = {"phytoplankton growth", "production loop"}
+PORTED_SECTIONS = {"phytoplankton growth", "production loop", "zooplankton"}
 # Attention thresholds (the review discipline: every port flags what needs work)
 NOISE_PCT   = 5.0    # un-ported section slower than CPU by > this % on the GPU build -> flag
 LOW_SOL_PCT = 35.0   # kernel SM-SOL below this -> under-utilized, flag for tuning
@@ -189,12 +192,20 @@ def attention_report(speed, det, outdir):
     open(os.path.join(outdir, "ATTENTION.txt"), "w").write(txt)
     print("\n" + txt)
 
+def _find(base, *patterns):
+    import glob
+    for p in patterns:
+        hits = sorted(glob.glob(os.path.join(base, p)))
+        if hits: return hits[0]
+    return os.path.join(base, patterns[0])   # nonexistent -> parser handles/raises
+
 def main():
     base = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "s2_production")
     outdir = os.path.join(base, "figs"); os.makedirs(outdir, exist_ok=True)
-    det  = parse_details(os.path.join(base, "s2_full11.csv"))
-    roof = parse_roof(os.path.join(base, "03_perkernel_and_budget.txt"))   # text page: has unit column
-    speed = parse_speed(os.path.join(base, "06_speed.txt"))
+    # glob the canonical artifacts so this works for any section dir (s2_production, s2_zoo, ...)
+    det  = parse_details(_find(base, "*full*.csv"))
+    roof = parse_roof(_find(base, "*perkernel*budget*.txt", "03_*.txt"))   # text page: has unit column
+    speed = parse_speed(_find(base, "*speed*.txt", "06_*.txt"))
     print(f"  parsed: {len(det)} kernels (details), {len(roof)} (roofline), {len(speed)} sections (speed)")
     made = []
     if speed: made.append(fig_speed(speed, outdir))
