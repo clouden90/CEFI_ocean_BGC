@@ -1,0 +1,11 @@
+Tier-2 -O2 CPU no-regression (object-swap: generic_COBALT.o at -O2, relinked against -O0 FMS)
+restructured(§2 HEAD) vs pristine(pre-§2 feature/gpu 8b586cd), 128x128x75, 12 steps:
+  section                restr(s)  prist(s)  delta    note
+  carbon calcs             40.30    40.44   -0.3%   un-ported (within noise)
+  phytoplankton growth     72.80    73.50   -0.9%   ported §1.2b (within noise)
+  bacteria growth           1.33     1.34   -0.6%   ported §2 (within noise)
+  zooplankton calc         14.87    14.56   +2.1%   ported §2 (within noise)
+  other losses             11.74    11.43   +2.7%   ported §2 (within noise)
+  production loop          16.86    16.67   +1.2%   ported §2 (within noise)
+VERDICT: all within +-3% run-to-run noise -> NO meaningful -O2 CPU regression from the GPU restructuring.
+(Expected: §2 diff is directive-only + empty loop-wrappers; CPU computational code byte-identical.)

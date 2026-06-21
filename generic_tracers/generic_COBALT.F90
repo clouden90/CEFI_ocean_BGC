@@ -4291,7 +4291,7 @@ contains
     !     RELY on that pre-loop init (e.g. ingest_matrix(3,4) is read at L4438 but never set for m=3 -> needs the
     !     pre-loop 0) -> firstprivate (NOT private, which would be garbage). prey_vec/pa_matrix/hp_pa_vec/tot_prey/
     !     tot_prey_hp/food1/food2/sw_fac_denom are fully recomputed per cell -> private. Has exp + ** (pow) ->
-    !     b2b WITHIN-BAND. Own residency scope (merge later). Outputs are per-cell (not accumulators) -> alloc:/from:.
+    !     b2b WITHIN-BAND. Resident in the merged whole-foodweb region. Outputs per-cell (not accumulators) -> alloc:/from:.
     ! === GPU §2 MERGE step-3: zoo's enter REMOVED — the whole working set (bacteria+zoo+losses+production) is
     !     already RESIDENT from the step-3 enter before bacteria. zoo kernel runs directly on resident data. ===
     !$omp target teams loop collapse(3) &
