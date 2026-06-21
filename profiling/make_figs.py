@@ -29,6 +29,12 @@ SECTION_MAP = {
     "F1L3956": "§1.3Fe", "F1L3978": "§1.3Si", "F1L4707": "production",
 }
 HIGHLIGHT = "production"          # the kernel this PR adds
+# Which mpp_clock sections are ON GPU so far (grows by one PR each port).
+# Un-ported sections still run on CPU in the GPU build -> expected flat/slower, NOT a win.
+PORTED_SECTIONS = {"phytoplankton growth", "production loop"}
+# Attention thresholds (the review discipline: every port flags what needs work)
+NOISE_PCT   = 5.0    # un-ported section slower than CPU by > this % on the GPU build -> flag
+LOW_SOL_PCT = 35.0   # kernel SM-SOL below this -> under-utilized, flag for tuning
 # H100 NVL roofs (FP64 vector peak, HBM3 BW) — for the roofline ceilings
 H100_FP64_GFLOPS = 34_000.0
 H100_HBM_GBs     = 3_900.0
@@ -97,17 +103,28 @@ def parse_speed(path):
 def fig_speed(speed, outdir):
     labels = list(speed.keys()); cpu = [speed[k][0] for k in labels]; gpu = [speed[k][1] for k in labels]
     x = range(len(labels)); w = 0.38
-    fig, ax = plt.subplots(figsize=(9, 4.5))
-    b1 = ax.bar([i-w/2 for i in x], cpu, w, label="CPU", color="#9aa7b4")
-    b2 = ax.bar([i+w/2 for i in x], gpu, w, label="GPU (H100)", color="#2e7d32")
+    fig, ax = plt.subplots(figsize=(9.5, 4.8))
+    ax.bar([i-w/2 for i in x], cpu, w, label="CPU", color="#9aa7b4")
+    # ported sections = solid green (a real GPU win); un-ported = hatched grey (still CPU, context only)
     for i, k in enumerate(labels):
-        sp = cpu[i]/gpu[i] if gpu[i] else 0
-        if "production" in k or "growth" in k:
-            ax.annotate(f"{sp:.1f}×", (i+w/2, gpu[i]), textcoords="offset points",
+        ported = k in PORTED_SECTIONS
+        ax.bar(i+w/2, gpu[i], w, color="#2e7d32" if ported else "#cfd6dd",
+               hatch=None if ported else "//", edgecolor="#7a8590" if not ported else None)
+        r = gpu[i]/cpu[i] if cpu[i] else 1
+        if ported:
+            ax.annotate(f"{cpu[i]/gpu[i]:.1f}×", (i+w/2, gpu[i]), textcoords="offset points",
                         xytext=(0, 4), ha="center", fontsize=10, fontweight="bold", color="#1b5e20")
+        elif r > 1 + NOISE_PCT/100.0:   # un-ported AND slower than noise -> flag in red
+            ax.annotate(f"+{(r-1)*100:.0f}%", (i+w/2, gpu[i]), textcoords="offset points",
+                        xytext=(0, 4), ha="center", fontsize=9, fontweight="bold", color="#c62828")
+    from matplotlib.patches import Patch
+    leg = [Patch(color="#9aa7b4", label="CPU"), Patch(color="#2e7d32", label="GPU — ported (win)"),
+           Patch(facecolor="#cfd6dd", hatch="//", edgecolor="#7a8590", label="GPU — un-ported (still CPU)")]
+    ax.legend(handles=leg, fontsize=8)
     ax.set_xticks(list(x)); ax.set_xticklabels([k.replace(" ", "\n") for k in labels], fontsize=9)
-    ax.set_ylabel("time over 12 steps (s)"); ax.set_title("COBALT section time: CPU vs GPU  (128³, 12 steps, H100)")
-    ax.legend(); fig.tight_layout()
+    ax.set_ylabel("time over 12 steps (s)")
+    ax.set_title("COBALT section time: CPU vs GPU  (128³, 12 steps, H100)\ngreen = ported win · hatched = un-ported (runs on CPU in the GPU build)")
+    fig.tight_layout()
     p = os.path.join(outdir, "fig_speed_beforeafter.png"); fig.savefig(p, dpi=130); plt.close(fig); return p
 
 def fig_sol(det, outdir):
@@ -143,6 +160,35 @@ def fig_roofline(roof, det, outdir):
     ax.grid(True, which="both", ls=":", alpha=0.4); fig.tight_layout()
     p = os.path.join(outdir, "fig_roofline.png"); fig.savefig(p, dpi=130); plt.close(fig); return p
 
+def attention_report(speed, det, outdir):
+    """The review discipline: after every port, auto-flag what needs attention so we don't have to
+    eyeball the figures. Writes figs/ATTENTION.txt and prints. Two checks:
+      (1) un-ported sections that got SLOWER on the GPU build by > noise (GPU-build CPU-section drift);
+      (2) GPU kernels with SM-SOL below LOW_SOL_PCT (under-utilized -> tuning candidates)."""
+    lines = ["# Attention report — what needs a closer look after this port", ""]
+    lines.append("## Un-ported sections slower on the GPU build (still CPU; watch as we port more)")
+    any1 = False
+    for k, (c, g) in speed.items():
+        if k in PORTED_SECTIONS:
+            lines.append(f"  - {k:24s} {c/g:5.2f}× FASTER  (ported ✓)"); continue
+        pct = (g/c - 1)*100 if c else 0
+        if pct > NOISE_PCT:
+            lines.append(f"  - {k:24s} +{pct:4.0f}% SLOWER on GPU build  ⚠ (un-ported, above {NOISE_PCT:.0f}% noise)"); any1 = True
+        else:
+            lines.append(f"  - {k:24s} {pct:+5.0f}% (within noise)")
+    if not any1: lines.append("  (none above noise)")
+    lines += ["", "## Under-utilized GPU kernels (SM-SOL < %.0f%% -> tuning candidates)" % LOW_SOL_PCT]
+    any2 = False
+    for t in SECTION_MAP.values():
+        if t in det:
+            sol = det[t].get("Compute (SM) Throughput", 0)
+            if sol < LOW_SOL_PCT:
+                lines.append(f"  - {t:10s} SM-SOL {sol:5.1f}%  ⚠"); any2 = True
+    if not any2: lines.append("  (all ported kernels above threshold)")
+    txt = "\n".join(lines) + "\n"
+    open(os.path.join(outdir, "ATTENTION.txt"), "w").write(txt)
+    print("\n" + txt)
+
 def main():
     base = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "s2_production")
     outdir = os.path.join(base, "figs"); os.makedirs(outdir, exist_ok=True)
@@ -155,6 +201,7 @@ def main():
     if det:   made.append(fig_sol(det, outdir))
     if roof:  made.append(fig_roofline(roof, det, outdir))
     for m in made: print(f"  wrote {m}")
+    if speed or det: attention_report(speed, det, outdir)
     print(f"  DONE — {len(made)} figures in {outdir}")
 
 if __name__ == "__main__":

@@ -1,0 +1,13 @@
+# Attention report — what needs a closer look after this port
+
+## Un-ported sections slower on the GPU build (still CPU; watch as we port more)
+  - carbon                      +1% (within noise)
+  - phytoplankton growth      4.64× FASTER  (ported ✓)
+  - zooplankton              +   8% SLOWER on GPU build  ⚠ (un-ported, above 5% noise)
+  - other losses             +  18% SLOWER on GPU build  ⚠ (un-ported, above 5% noise)
+  - production loop           7.84× FASTER  (ported ✓)
+
+## Under-utilized GPU kernels (SM-SOL < 35% -> tuning candidates)
+  - A          SM-SOL  10.6%  ⚠
+  - Geider     SM-SOL  31.8%  ⚠
+  - E          SM-SOL  15.2%  ⚠
