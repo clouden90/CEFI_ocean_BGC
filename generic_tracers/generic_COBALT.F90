@@ -3507,6 +3507,40 @@ contains
       !$omp&   phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu,phyto(n)%P_C_max, &
       !$omp&   phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix)
     enddo
+    ! === GPU §2 MERGE step-4 (FINAL): growth folded in -> ONE resident region for the WHOLE foodweb
+    !     (growth->bacteria->zoo->losses->production, all 17 kernels, one enter / one exit). Growth's §1.2b enter
+    !     ABOVE keeps its correct to:/alloc categorization (the §1.3 alloc-vs-to: fix); we APPEND only the
+    !     downstream-section arrays growth does not map. Growth's phyto outputs (juptake_*, q_*, f_mu_mem, P_C_max,
+    !     nh4lim, jdissloss_si, jexuloss_fe) + expkT are ALREADY resident -> downstream stops re-loading them (the
+    !     big HtoD win). f_nh3 alloc here; host nh3-island (L3749) writes it; target update to(f_nh3) bridges it. ===
+    !$omp target enter data map(to: zoo, bact, hblt_depth)
+    !$omp target enter data map(to: cobalt%f_ndet,cobalt%f_ndet_fast,cobalt%f_pdet,cobalt%f_pdet_fast, &
+    !$omp&   cobalt%f_fedet,cobalt%f_sidet,cobalt%zt,cobalt%hp_jingest_fe,cobalt%hp_jingest_sio2, &
+    !$omp&   cobalt%f_ldon,cobalt%f_ldop)
+    !$omp target enter data map(to: cobalt%jprod_ndet,cobalt%jprod_pdet,cobalt%jprod_sldon,cobalt%jprod_srdon, &
+    !$omp&   cobalt%jprod_sldop,cobalt%jprod_srdop,cobalt%jprod_fedet,cobalt%jprod_sidet,cobalt%jprod_ndet_fast, &
+    !$omp&   cobalt%jprod_pdet_fast,cobalt%jprod_fed,cobalt%jprod_sio4,cobalt%jno3denit_wc)
+    !$omp target enter data map(alloc: cobalt%hp_temp_lim,cobalt%hp_o2lim,cobalt%hp_jingest_n,cobalt%hp_jingest_p, &
+    !$omp&   cobalt%total_filter_feeding,cobalt%juptake_nh4amx,cobalt%juptake_no3amx,cobalt%jnamx, &
+    !$omp&   cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif,cobalt%f_nh3)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(alloc: phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2, &
+      !$omp&   phyto(n)%stress_fac,phyto(n)%jaggloss_n,phyto(n)%jaggloss_p,phyto(n)%jaggloss_fe,phyto(n)%jaggloss_sio2, &
+      !$omp&   phyto(n)%jmortloss_n,phyto(n)%jmortloss_p,phyto(n)%jmortloss_fe,phyto(n)%vmove,phyto(n)%jvirloss_n, &
+      !$omp&   phyto(n)%jvirloss_p,phyto(n)%jvirloss_fe,phyto(n)%jvirloss_sio2,phyto(n)%jexuloss_n,phyto(n)%jexuloss_p)
+    enddo
+    do m = 1,NUM_ZOO
+      !$omp target enter data map(to: zoo(m)%f_n)
+      !$omp target enter data map(alloc: zoo(m)%temp_lim,zoo(m)%o2lim,zoo(m)%jingest_n,zoo(m)%jingest_p, &
+      !$omp&   zoo(m)%jingest_fe,zoo(m)%jingest_sio2,zoo(m)%jzloss_n,zoo(m)%jzloss_p,zoo(m)%jhploss_n,zoo(m)%jhploss_p, &
+      !$omp&   zoo(m)%jprod_ndet,zoo(m)%jprod_pdet,zoo(m)%jprod_sldon,zoo(m)%jprod_ldon,zoo(m)%jprod_srdon, &
+      !$omp&   zoo(m)%jprod_sldop,zoo(m)%jprod_ldop,zoo(m)%jprod_srdop,zoo(m)%jprod_fedet,zoo(m)%jprod_sidet, &
+      !$omp&   zoo(m)%jprod_n,zoo(m)%jprod_nh4,zoo(m)%jprod_po4,zoo(m)%jprod_fed,zoo(m)%jprod_sio4)
+    enddo
+    !$omp target enter data map(to: bact(1)%f_n)
+    !$omp target enter data map(alloc: bact(1)%temp_lim,bact(1)%jprod_n,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim, &
+    !$omp&   bact(1)%juptake_ldon,bact(1)%juptake_ldop,bact(1)%jprod_nh4,bact(1)%jprod_po4, &
+    !$omp&   bact(1)%jzloss_n,bact(1)%jzloss_p,bact(1)%jvirloss_n,bact(1)%jvirloss_p)
     !$omp target teams loop collapse(3) private(n,k_po4_adjust)
     do k=1,nk ; do j=jsc,jec ; do i=isc,iec
        do n = 1,NUM_PHYTO    !{
@@ -3752,6 +3786,9 @@ contains
        cobalt%f_nh3(i,j,k) = cobalt%f_nh4(i,j,k)/(1.+10**(calc_pka_nh3(temp(i,j,k),salt(i,j,k))+log10(min(max(cobalt%f_htotal(i,j,1),1e-10),1e-5)))) * grid_tmask(i,j,k)
     enddo;  enddo ; enddo !} i,j,k
     end if
+    ! === GPU §2 MERGE step-4 bridge: nh3 island writes f_nh3 on HOST; push to device for bacteria's nitrif kernel
+    !     (downstream in the same resident region). Unconditional so the device copy is current either way. ===
+    !$omp target update to(cobalt%f_nh3)
 
 
     !
@@ -4003,25 +4040,8 @@ contains
     enddo; enddo ; enddo !} i,j,k
     ! === bring §1.3 outputs back to host (downstream foodweb/chem sections are CPU on this branch) ===
 
-    ! === GPU §1.2b MERGE: copy growth-block outputs back to host ONCE, release the scope ===
-    do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%uptake_p_2_n, &
-      !$omp&   phyto(n)%no3lim,phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim, &
-      !$omp&   phyto(n)%felim,phyto(n)%def_fe,phyto(n)%liebig_lim,phyto(n)%pcmlim_aclm_inst, &
-      !$omp&   phyto(n)%f_pcmlim_aclm,phyto(n)%irrlim,phyto(n)%theta,phyto(n)%bresp,phyto(n)%mu, &
-      !$omp&   phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n,phyto(n)%mu_mix, &
-      !$omp&   phyto(n)%f_mu_mem,phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
-      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4,phyto(n)%jexuloss_fe, &
-      !$omp&   phyto(n)%jdissloss_si,phyto(n)%q_si_2_n)
-      !$omp target exit data map(delete: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
-    enddo
-    !$omp target exit data map(from: cobalt%daylength,cobalt%irr_inst,cobalt%irr_aclm_inst,cobalt%irr_mix, &
-    !$omp&   kblt,cobalt%f_irr_aclm_sfc,cobalt%f_irr_aclm_z,cobalt%f_irr_aclm,cobalt%f_chl,cobalt%expkT, &
-    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jprod_ldon,cobalt%jprod_ldop,cobalt%jo2resp_wc, &
-    !$omp&   cobalt%nlg_diatoms,cobalt%nmd_diatoms,cobalt%nlg_misc,cobalt%nmd_misc)
-    !$omp target exit data map(delete: cobalt%f_po4,cobalt%f_no3,cobalt%f_nh4,cobalt%f_o2,cobalt%f_sio4, &
-    !$omp&   cobalt%f_fed,Temp,geolat,zmid,Salt,dzt,grid_tmask,sw_pen_band,opacity_band, &
-    !$omp&   max_wavelength_band,cobalt%mld_aclm,cobalt%f_silg,cobalt%f_simd,cobalt,phyto)
+    ! === GPU §2 MERGE step-4: growth's exit REMOVED — growth outputs stay DEVICE-RESIDENT through
+    !     bacteria+zoo+losses+production; released at the single fused exit after production. ===
     call mpp_clock_end(id_clock_phyto_growth)
 !
 !---------------------------------------------------------------------------
@@ -4035,44 +4055,8 @@ contains
     !     and per-cell bact_uptake_ratio -> private. Has exp + ** (pow) -> b2b WITHIN-BAND. Accumulators
     !     cobalt%jo2resp_wc/jprod_nh4/jprod_po4/jno3denit_wc carry growth values (+=) -> map(to:) AND from:;
     !     fresh outputs -> alloc:/from:. f_nh3 is the CPU nh3-island diagnostic (host-resident input). mem:separate.
-    ! === GPU §2 MERGE step-3: bacteria + zoo + losses + production fused into ONE residency region (this enter
-    !     before bacteria). bacteria outputs that downstream consumes (bact%temp_lim -> losses, bact%jprod_n ->
-    !     production) flip to:->alloc: (produced in-region). +jno3denit_wc accumulator, +bacteria inputs
-    !     (cobalt%f_no3/f_nh4/f_nh3/f_irr_aclm/f_ldon/f_ldop, phyto(SMALL)%nh4lim). f_nh3 still external (growth's
-    !     nh3 island is a separate scope until step-4). scheme_nitrif/vmax_bact are kernel firstprivate. ===
-    !$omp target enter data map(to: cobalt, zoo, phyto, bact, Temp, hblt_depth)
-    !$omp target enter data map(to: cobalt%f_o2,cobalt%f_ndet,cobalt%f_ndet_fast,cobalt%f_pdet,cobalt%f_pdet_fast, &
-    !$omp&   cobalt%f_fedet,cobalt%f_sidet,cobalt%expkT,cobalt%zt,cobalt%hp_jingest_fe,cobalt%hp_jingest_sio2, &
-    !$omp&   cobalt%f_no3,cobalt%f_nh4,cobalt%f_nh3,cobalt%f_irr_aclm,cobalt%f_ldon,cobalt%f_ldop)
-    !$omp target enter data map(to: cobalt%jprod_ndet,cobalt%jprod_pdet,cobalt%jprod_sldon,cobalt%jprod_ldon, &
-    !$omp&   cobalt%jprod_srdon,cobalt%jprod_sldop,cobalt%jprod_ldop,cobalt%jprod_srdop,cobalt%jprod_fedet, &
-    !$omp&   cobalt%jprod_sidet,cobalt%jprod_ndet_fast,cobalt%jprod_pdet_fast,cobalt%jprod_fed,cobalt%jprod_sio4, &
-    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jo2resp_wc,cobalt%jno3denit_wc)
-    !$omp target enter data map(alloc: cobalt%hp_temp_lim,cobalt%hp_o2lim,cobalt%hp_jingest_n,cobalt%hp_jingest_p, &
-    !$omp&   cobalt%total_filter_feeding,cobalt%juptake_nh4amx,cobalt%juptake_no3amx,cobalt%jnamx, &
-    !$omp&   cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif)
-    !$omp target enter data map(to: phyto(SMALL)%nh4lim)
-    do n = 1,NUM_PHYTO
-      !$omp target enter data map(to: phyto(n)%f_n,phyto(n)%q_p_2_n,phyto(n)%q_fe_2_n,phyto(n)%q_si_2_n, &
-      !$omp&   phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%juptake_no3,phyto(n)%juptake_nh4,phyto(n)%juptake_n2, &
-      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%jdissloss_si,phyto(n)%jexuloss_fe)
-      !$omp target enter data map(alloc: phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2, &
-      !$omp&   phyto(n)%stress_fac,phyto(n)%jaggloss_n,phyto(n)%jaggloss_p,phyto(n)%jaggloss_fe,phyto(n)%jaggloss_sio2, &
-      !$omp&   phyto(n)%jmortloss_n,phyto(n)%jmortloss_p,phyto(n)%jmortloss_fe,phyto(n)%vmove,phyto(n)%jvirloss_n, &
-      !$omp&   phyto(n)%jvirloss_p,phyto(n)%jvirloss_fe,phyto(n)%jvirloss_sio2,phyto(n)%jexuloss_n,phyto(n)%jexuloss_p)
-    enddo
-    do m = 1,NUM_ZOO
-      !$omp target enter data map(to: zoo(m)%f_n)
-      !$omp target enter data map(alloc: zoo(m)%temp_lim,zoo(m)%o2lim,zoo(m)%jingest_n,zoo(m)%jingest_p, &
-      !$omp&   zoo(m)%jingest_fe,zoo(m)%jingest_sio2,zoo(m)%jzloss_n,zoo(m)%jzloss_p,zoo(m)%jhploss_n,zoo(m)%jhploss_p, &
-      !$omp&   zoo(m)%jprod_ndet,zoo(m)%jprod_pdet,zoo(m)%jprod_sldon,zoo(m)%jprod_ldon,zoo(m)%jprod_srdon, &
-      !$omp&   zoo(m)%jprod_sldop,zoo(m)%jprod_ldop,zoo(m)%jprod_srdop,zoo(m)%jprod_fedet,zoo(m)%jprod_sidet, &
-      !$omp&   zoo(m)%jprod_n,zoo(m)%jprod_nh4,zoo(m)%jprod_po4,zoo(m)%jprod_fed,zoo(m)%jprod_sio4)
-    enddo
-    !$omp target enter data map(to: bact(1)%f_n)
-    !$omp target enter data map(alloc: bact(1)%temp_lim,bact(1)%jprod_n,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim, &
-    !$omp&   bact(1)%juptake_ldon,bact(1)%juptake_ldop,bact(1)%jprod_nh4,bact(1)%jprod_po4, &
-    !$omp&   bact(1)%jzloss_n,bact(1)%jzloss_p,bact(1)%jvirloss_n,bact(1)%jvirloss_p)
+    ! === GPU §2 MERGE step-4: bacteria's enter REMOVED — the whole foodweb working set is already RESIDENT from
+    !     the step-4 enter before growth. bacteria/zoo/losses/production kernels run directly on resident data. ===
 
     ! Anammox converts NH4+ to N2 using NO3- in low O2 environments.
     ! This was not included in ESM4.1 and gamma_nh4amx is currently 0.0
@@ -4958,17 +4942,20 @@ contains
        endif
 
     enddo; enddo ; enddo !} i,j,k
-    ! === GPU §2 MERGE step-2: SINGLE fused exit for the zoo+losses+production region. from: every output the
-    !     still-CPU downstream (source/sink, diag) consumes — zoo (jingest_*/temp_lim/o2lim/jzloss_*/jhploss_*/
-    !     hp_*/total_filter_feeding), losses (j*loss_*/stress_fac/vmove), production (zoo%jprod_*), cobalt
-    !     accumulators; delete: all inputs. Only DtoH for the region. zoo%jingest_*/temp_lim & hp_jingest_n/p
-    !     flipped delete->from (now in-region OUTPUTS); hp_jingest_fe/sio2 stay delete (external). ===
+    ! === GPU §2 MERGE step-4 (FINAL): SINGLE fused exit for the WHOLE foodweb (growth->...->production). from:
+    !     every output the still-CPU downstream (source/sink, diag) + next timestep need — growth (phyto q_*/
+    !     juptake_*/no3lim/.../mu/f_mu_mem, cobalt irr_*/expkT/diatoms/f_irr_aclm relaxation), bacteria, zoo,
+    !     losses, production, all accumulators; delete: only the true external inputs (prognostic f_*, grid). This
+    !     is now the ONLY enter/exit for the entire foodweb region. f_nh3 already on host (island) -> delete. ===
     !$omp target exit data map(from: cobalt%jprod_ndet,cobalt%jprod_pdet,cobalt%jprod_sldon,cobalt%jprod_ldon, &
     !$omp&   cobalt%jprod_srdon,cobalt%jprod_sldop,cobalt%jprod_ldop,cobalt%jprod_srdop,cobalt%jprod_fedet, &
     !$omp&   cobalt%jprod_sidet,cobalt%jprod_ndet_fast,cobalt%jprod_pdet_fast,cobalt%jprod_fed,cobalt%jprod_sio4, &
-    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jo2resp_wc,cobalt%hp_temp_lim,cobalt%hp_o2lim, &
-    !$omp&   cobalt%hp_jingest_n,cobalt%hp_jingest_p,cobalt%total_filter_feeding,cobalt%juptake_nh4amx, &
-    !$omp&   cobalt%juptake_no3amx,cobalt%jnamx,cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif,cobalt%jno3denit_wc)
+    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jo2resp_wc,cobalt%jno3denit_wc,cobalt%hp_temp_lim, &
+    !$omp&   cobalt%hp_o2lim,cobalt%hp_jingest_n,cobalt%hp_jingest_p,cobalt%total_filter_feeding, &
+    !$omp&   cobalt%juptake_nh4amx,cobalt%juptake_no3amx,cobalt%jnamx,cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif, &
+    !$omp&   cobalt%daylength,cobalt%irr_inst,cobalt%irr_aclm_inst,cobalt%irr_mix,kblt,cobalt%f_irr_aclm_sfc, &
+    !$omp&   cobalt%f_irr_aclm_z,cobalt%f_irr_aclm,cobalt%f_chl,cobalt%expkT,cobalt%nlg_diatoms,cobalt%nmd_diatoms, &
+    !$omp&   cobalt%nlg_misc,cobalt%nmd_misc)
     do m = 1,NUM_ZOO
       !$omp target exit data map(from: zoo(m)%jprod_ndet,zoo(m)%jprod_pdet,zoo(m)%jprod_sldon,zoo(m)%jprod_ldon, &
       !$omp&   zoo(m)%jprod_srdon,zoo(m)%jprod_sldop,zoo(m)%jprod_ldop,zoo(m)%jprod_srdop,zoo(m)%jprod_fedet, &
@@ -4982,18 +4969,23 @@ contains
       !$omp&   phyto(n)%jaggloss_fe,phyto(n)%jaggloss_sio2,phyto(n)%jmortloss_n,phyto(n)%jmortloss_p, &
       !$omp&   phyto(n)%jmortloss_fe,phyto(n)%jdissloss_si,phyto(n)%vmove,phyto(n)%jvirloss_n,phyto(n)%jvirloss_p, &
       !$omp&   phyto(n)%jvirloss_fe,phyto(n)%jvirloss_sio2,phyto(n)%jexuloss_n,phyto(n)%jexuloss_p,phyto(n)%jexuloss_fe, &
-      !$omp&   phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2)
-      !$omp target exit data map(delete: phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%f_n,phyto(n)%q_p_2_n, &
-      !$omp&   phyto(n)%q_fe_2_n,phyto(n)%q_si_2_n,phyto(n)%juptake_no3,phyto(n)%juptake_nh4,phyto(n)%juptake_n2, &
-      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe)
+      !$omp&   phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2, &
+      !$omp&   phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%q_si_2_n,phyto(n)%uptake_p_2_n,phyto(n)%no3lim, &
+      !$omp&   phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim,phyto(n)%felim,phyto(n)%def_fe, &
+      !$omp&   phyto(n)%liebig_lim,phyto(n)%pcmlim_aclm_inst,phyto(n)%f_pcmlim_aclm,phyto(n)%irrlim,phyto(n)%theta, &
+      !$omp&   phyto(n)%bresp,phyto(n)%mu,phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n, &
+      !$omp&   phyto(n)%mu_mix,phyto(n)%f_mu_mem,phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
+      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4)
+      !$omp target exit data map(delete: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
     enddo
     !$omp target exit data map(from: bact(1)%jvirloss_n,bact(1)%jvirloss_p,bact(1)%jzloss_n,bact(1)%jzloss_p, &
     !$omp&   bact(1)%temp_lim,bact(1)%jprod_n,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim,bact(1)%juptake_ldon, &
     !$omp&   bact(1)%juptake_ldop,bact(1)%jprod_nh4,bact(1)%jprod_po4)
     !$omp target exit data map(delete: bact(1)%f_n,cobalt%f_o2,cobalt%f_no3,cobalt%f_nh4,cobalt%f_nh3, &
-    !$omp&   cobalt%f_irr_aclm,cobalt%f_ldon,cobalt%f_ldop,phyto(SMALL)%nh4lim, &
-    !$omp&   cobalt%hp_jingest_fe,cobalt%hp_jingest_sio2,cobalt%f_ndet,cobalt%f_ndet_fast,cobalt%f_pdet, &
-    !$omp&   cobalt%f_pdet_fast,cobalt%f_fedet,cobalt%f_sidet,cobalt%expkT,cobalt%zt,hblt_depth,Temp,cobalt,zoo,phyto,bact)
+    !$omp&   cobalt%f_ldon,cobalt%f_ldop,cobalt%f_po4,cobalt%f_sio4,cobalt%f_fed,cobalt%f_silg,cobalt%f_simd, &
+    !$omp&   cobalt%mld_aclm,cobalt%hp_jingest_fe,cobalt%hp_jingest_sio2,cobalt%f_ndet,cobalt%f_ndet_fast, &
+    !$omp&   cobalt%f_pdet,cobalt%f_pdet_fast,cobalt%f_fedet,cobalt%f_sidet,cobalt%zt,hblt_depth,Temp,geolat, &
+    !$omp&   zmid,Salt,dzt,grid_tmask,sw_pen_band,opacity_band,max_wavelength_band,cobalt,zoo,phyto,bact)
     call mpp_clock_end(id_clock_production_loop)
 
     call mpp_clock_begin(id_clock_ballast_loops)
