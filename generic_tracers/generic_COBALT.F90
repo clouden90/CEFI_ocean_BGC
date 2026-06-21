@@ -3476,7 +3476,8 @@ contains
     !
     ! Calculate iron cell quota
     !
-    ! === GPU §1.1: nutrient limitation -- do concurrent + standalone per-call OpenMP-target residency (mem:separate) ===
+    ! === GPU §1.1: nutrient limitation -- omp target teams loop collapse(3); residency = the merged
+    !     growth-block scope (below, §1.2b MERGE), mem:separate. ===
     ! Compute via explicit omp target teams loop collapse(3). TEST: bare `do concurrent` here was grid 9600
     ! in isolation but REGRESSED to grid-75/6.25%-occ once the §1.2 Geider loop was added to the file --
     ! nvfortran's do-concurrent auto-parallelization is context-sensitive/unreliable; collapse(3) guarantees
@@ -3727,7 +3728,7 @@ contains
     !
     ! Do the same for the limitation on light saturated photosynthesis in the mixed layer
     !
-    ! === GPU §1.2b Loop B (f_irr_aclm / f_pcmlim_aclm relaxation): pointwise collapse(3) + own scope.
+    ! === GPU §1.2b Loop B (f_irr_aclm / f_pcmlim_aclm relaxation): pointwise collapse(3); resident in the merged growth-block scope.
     !     Pure arithmetic (RMW relaxation, no transcendentals) -> expected BIT-IDENTICAL to prior GPU.
     !     f_irr_aclm/f_pcmlim_aclm are RMW accumulators -> mapped to:/from: (carry prior value). ===
     !$omp target teams loop collapse(3) private(n)
@@ -3766,10 +3767,10 @@ contains
     ! Moore and Chisholm: https://doi.org/10.4319/lo.1999.44.3.0628
     ! Stock et al. (submitted) (link to be added as soon as available)
     !
-    ! === GPU §1.2a (Geider growth -- the dominant compute in the growth block): do concurrent
-    !     + per-kernel OpenMP-target residency (mem:separate). Only this loop is offloaded; the
-    !     columnar irradiance loops (A/E) stay on CPU and bridge via the host-valid inputs mapped
-    !     below. §1.2b will restructure A/E and merge §1.1+§1.2 into one growth-block scope. ===
+    ! === GPU §1.2a Geider growth (the dominant compute in the growth block, ~54 ms/call): omp target
+    !     teams loop collapse(3), mem:separate. Resident in the merged growth-block scope (mapped at
+    !     §1.1 above, §1.2b MERGE); §1.2b also ported the columnar A/E loops, so the whole block is
+    !     on-device (nh3 diag is the only CPU island). ===
     ! TUNE (§1.2a profile): bare `do concurrent` under-parallelized this complex body (nvfortran
     ! collapsed only k -> 75 blocks / 9600 threads / 6.25% occ). Explicit collapse(3) forces all 3 dims.
     !$omp target teams loop collapse(3) private(n,m,bresp_temp,mu_opt,alpha_step,alpha_temp, &
@@ -3879,8 +3880,8 @@ contains
     ! 1.3: Nutrient uptake calculations
     !-----------------------------------------------------------------------
     !
-    ! === GPU §1.2b/§1.3 nutrient uptake: omp target teams loop collapse(3) + own per-call residency
-    !     (mem:separate). Own scope for now; step-2 consolidates §1.1+Geider+§1.3 into one block scope.
+    ! === GPU §1.2b/§1.3 nutrient uptake: omp target teams loop collapse(3); resident in the merged
+    !     growth-block scope (mem:separate).
     !     NOTE jprod_*/jo2resp_wc are accumulators (read-modify-write) -> mapped `to:` (NOT alloc) so their
     !     prior host value is preserved; alloc would zero them on device and corrupt downstream sections. ===
     do n = 1,NUM_PHYTO
