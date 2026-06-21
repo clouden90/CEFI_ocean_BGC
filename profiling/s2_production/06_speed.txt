@@ -1,0 +1,21 @@
+===== SPEED §2: 128x128x75, 12 steps, CPU vs GPU =====
+Sun Jun 21 03:39:48 UTC 2026
+NVIDIA H100 NVL
+  cpu wall=618s exit=0
+    [cpu] Total runtime                            1    617.233081    617.233081    617.233081      0.000000  1.000     0     0     0
+    [cpu] (Cobalt: carbon calcs)                  12     40.459718     40.459718     40.459718      0.000000  0.066    31     0     0
+    [cpu] (Cobalt: phytoplankton growth ca        12     73.430642     73.430642     73.430642      0.000000  0.119    31     0     0
+    [cpu] (Cobalt: zooplankton calculation        12     14.572669     14.572669     14.572669      0.000000  0.024    31     0     0
+    [cpu] (Cobalt: other losses)                  12     11.220341     11.220341     11.220341      0.000000  0.018    31     0     0
+    [cpu] (Cobalt: production loop)               12     16.543381     16.543381     16.543381      0.000000  0.027    31     0     0
+  gpu wall=556s exit=0
+    [gpu] Total runtime                            1    555.059078    555.059078    555.059078      0.000000  1.000     0     0     0
+    [gpu] (Cobalt: carbon calcs)                  12     40.996461     40.996461     40.996461      0.000000  0.074    31     0     0
+    [gpu] (Cobalt: phytoplankton growth ca        12     15.840676     15.840676     15.840676      0.000000  0.029    31     0     0
+    [gpu] (Cobalt: zooplankton calculation        12     15.719610     15.719610     15.719610      0.000000  0.028    31     0     0
+    [gpu] (Cobalt: other losses)                  12     13.190495     13.190495     13.190495      0.000000  0.024    31     0     0
+    [gpu] (Cobalt: production loop)               12      2.110501      2.110501      2.110501      0.000000  0.004    31     0     0
+
+===== production-loop speedup =====
+  production loop: CPU=16.54s  GPU=2.11s  speedup=7.84x
+==== DONE Sun Jun 21 03:59:22 UTC 2026 ====

@@ -4673,6 +4673,38 @@ contains
     !
 
     call mpp_clock_begin(id_clock_production_loop)
+    ! === GPU §2 production loop: pointwise reaction kinetics over (i,j,k) -> omp target teams loop collapse(3).
+    !     Inner do m=1,NUM_ZOO / NUM_PHYTO stay SEQUENTIAL per thread (private). PURE ARITHMETIC (no exp/trig)
+    !     -> b2b expected BIT-IDENTICAL. OWN residency scope on this branch (production is 4th downstream of the
+    !     growth block; the contiguous cross-section residency merge is the later endgame). Residency ledger:
+    !       - accumulators cobalt%jprod_* + jo2resp_wc carry UPSTREAM cpu values -> map(to:) AND map(from:)
+    !         (the alloc-vs-to: rule: partial-write/accumulator arrays must carry their prior value);
+    !       - read-only inputs (cobalt%f_o2/hp_jingest_*, zoo%jingest_*/f_n/temp_lim, phyto%j*loss_*, bact%*)
+    !         -> map(to:) / delete;
+    !       - per-zoo outputs read downstream (source/sink L5794, diag L6643+) -> alloc: / map(from:).
+    !     mem:separate. Scalar params (phi_*, gge_max, refuge_conc, ...) ride along with the derived-type map.
+    !$omp target enter data map(to: cobalt, zoo, phyto, bact)
+    !$omp target enter data map(to: cobalt%f_o2,cobalt%hp_jingest_n,cobalt%hp_jingest_p,cobalt%hp_jingest_fe, &
+    !$omp&   cobalt%hp_jingest_sio2)
+    !$omp target enter data map(to: cobalt%jprod_ndet,cobalt%jprod_pdet,cobalt%jprod_sldon,cobalt%jprod_ldon, &
+    !$omp&   cobalt%jprod_srdon,cobalt%jprod_sldop,cobalt%jprod_ldop,cobalt%jprod_srdop,cobalt%jprod_fedet, &
+    !$omp&   cobalt%jprod_sidet,cobalt%jprod_ndet_fast,cobalt%jprod_pdet_fast,cobalt%jprod_fed,cobalt%jprod_sio4, &
+    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jo2resp_wc)
+    do m = 1,NUM_ZOO
+      !$omp target enter data map(to: zoo(m)%jingest_n,zoo(m)%jingest_p,zoo(m)%jingest_fe,zoo(m)%jingest_sio2, &
+      !$omp&   zoo(m)%f_n,zoo(m)%temp_lim)
+      !$omp target enter data map(alloc: zoo(m)%jprod_ndet,zoo(m)%jprod_pdet,zoo(m)%jprod_sldon,zoo(m)%jprod_ldon, &
+      !$omp&   zoo(m)%jprod_srdon,zoo(m)%jprod_sldop,zoo(m)%jprod_ldop,zoo(m)%jprod_srdop,zoo(m)%jprod_fedet, &
+      !$omp&   zoo(m)%jprod_sidet,zoo(m)%jprod_n,zoo(m)%jprod_nh4,zoo(m)%jprod_po4,zoo(m)%jprod_fed,zoo(m)%jprod_sio4)
+    enddo
+    do m = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(m)%jaggloss_n,phyto(m)%jaggloss_p,phyto(m)%jaggloss_fe, &
+      !$omp&   phyto(m)%jaggloss_sio2,phyto(m)%jvirloss_n,phyto(m)%jvirloss_p,phyto(m)%jvirloss_fe, &
+      !$omp&   phyto(m)%jvirloss_sio2,phyto(m)%jmortloss_n,phyto(m)%jmortloss_p,phyto(m)%jmortloss_fe, &
+      !$omp&   phyto(m)%jexuloss_n,phyto(m)%jexuloss_p,phyto(m)%jexuloss_fe,phyto(m)%jdissloss_si)
+    enddo
+    !$omp target enter data map(to: bact(1)%jprod_n,bact(1)%jvirloss_n,bact(1)%jvirloss_p)
+    !$omp target teams loop collapse(3) private(m,assim_eff)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
 
        ! 3.3.1: Production of detritus and dissolved organic matter
@@ -4880,6 +4912,27 @@ contains
        endif
 
     enddo; enddo ; enddo !} i,j,k
+    ! === GPU §2 production MERGE-out: accumulators + per-zoo outputs back to host; release the scope ===
+    !$omp target exit data map(from: cobalt%jprod_ndet,cobalt%jprod_pdet,cobalt%jprod_sldon,cobalt%jprod_ldon, &
+    !$omp&   cobalt%jprod_srdon,cobalt%jprod_sldop,cobalt%jprod_ldop,cobalt%jprod_srdop,cobalt%jprod_fedet, &
+    !$omp&   cobalt%jprod_sidet,cobalt%jprod_ndet_fast,cobalt%jprod_pdet_fast,cobalt%jprod_fed,cobalt%jprod_sio4, &
+    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jo2resp_wc)
+    do m = 1,NUM_ZOO
+      !$omp target exit data map(from: zoo(m)%jprod_ndet,zoo(m)%jprod_pdet,zoo(m)%jprod_sldon,zoo(m)%jprod_ldon, &
+      !$omp&   zoo(m)%jprod_srdon,zoo(m)%jprod_sldop,zoo(m)%jprod_ldop,zoo(m)%jprod_srdop,zoo(m)%jprod_fedet, &
+      !$omp&   zoo(m)%jprod_sidet,zoo(m)%jprod_n,zoo(m)%jprod_nh4,zoo(m)%jprod_po4,zoo(m)%jprod_fed,zoo(m)%jprod_sio4)
+      !$omp target exit data map(delete: zoo(m)%jingest_n,zoo(m)%jingest_p,zoo(m)%jingest_fe,zoo(m)%jingest_sio2, &
+      !$omp&   zoo(m)%f_n,zoo(m)%temp_lim)
+    enddo
+    do m = 1,NUM_PHYTO
+      !$omp target exit data map(delete: phyto(m)%jaggloss_n,phyto(m)%jaggloss_p,phyto(m)%jaggloss_fe, &
+      !$omp&   phyto(m)%jaggloss_sio2,phyto(m)%jvirloss_n,phyto(m)%jvirloss_p,phyto(m)%jvirloss_fe, &
+      !$omp&   phyto(m)%jvirloss_sio2,phyto(m)%jmortloss_n,phyto(m)%jmortloss_p,phyto(m)%jmortloss_fe, &
+      !$omp&   phyto(m)%jexuloss_n,phyto(m)%jexuloss_p,phyto(m)%jexuloss_fe,phyto(m)%jdissloss_si)
+    enddo
+    !$omp target exit data map(delete: bact(1)%jprod_n,bact(1)%jvirloss_n,bact(1)%jvirloss_p, &
+    !$omp&   cobalt%f_o2,cobalt%hp_jingest_n,cobalt%hp_jingest_p,cobalt%hp_jingest_fe,cobalt%hp_jingest_sio2, &
+    !$omp&   cobalt,zoo,phyto,bact)
     call mpp_clock_end(id_clock_production_loop)
 
     call mpp_clock_begin(id_clock_ballast_loops)
