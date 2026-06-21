@@ -31,10 +31,12 @@ SECTION_MAP = {
     # archive's CSV (profiled at its line of the day) still resolves: §2 prod=F1L4707, post-zoo=F1L4748
     "F1L4707": "production", "F1L4748": "production",
 }
-HIGHLIGHT = "zoo"                # the kernel this PR adds
-# Which mpp_clock sections are ON GPU so far (grows by one PR each port). Names match parse_speed's keys.
-# Un-ported sections still run on CPU in the GPU build -> expected flat/slower, NOT a win.
-PORTED_SECTIONS = {"phytoplankton growth", "production loop", "zooplankton"}
+HIGHLIGHT = "zoo"                # the kernel this PR adds (cosmetic: which SOL bar is red)
+# A section is "ported" iff its GPU time is well below CPU. INFERRED FROM THE DATA (not a global list) so
+# each archive's figure reflects ITS OWN era — e.g. s2_production's fig correctly shows zoo as un-ported,
+# while s2_zoo's shows it ported. Ported sections run 4-8x (ratio ~0.1-0.25); un-ported are flat/slower (~1+).
+PORTED_RATIO = 0.7
+def is_ported(cpu, gpu): return bool(cpu) and gpu/cpu < PORTED_RATIO
 # Attention thresholds (the review discipline: every port flags what needs work)
 NOISE_PCT   = 5.0    # un-ported section slower than CPU by > this % on the GPU build -> flag
 LOW_SOL_PCT = 35.0   # kernel SM-SOL below this -> under-utilized, flag for tuning
@@ -110,7 +112,7 @@ def fig_speed(speed, outdir):
     ax.bar([i-w/2 for i in x], cpu, w, label="CPU", color="#9aa7b4")
     # ported sections = solid green (a real GPU win); un-ported = hatched grey (still CPU, context only)
     for i, k in enumerate(labels):
-        ported = k in PORTED_SECTIONS
+        ported = is_ported(cpu[i], gpu[i])
         ax.bar(i+w/2, gpu[i], w, color="#2e7d32" if ported else "#cfd6dd",
                hatch=None if ported else "//", edgecolor="#7a8590" if not ported else None)
         r = gpu[i]/cpu[i] if cpu[i] else 1
@@ -172,7 +174,7 @@ def attention_report(speed, det, outdir):
     lines.append("## Un-ported sections slower on the GPU build (still CPU; watch as we port more)")
     any1 = False
     for k, (c, g) in speed.items():
-        if k in PORTED_SECTIONS:
+        if is_ported(c, g):
             lines.append(f"  - {k:24s} {c/g:5.2f}× FASTER  (ported ✓)"); continue
         pct = (g/c - 1)*100 if c else 0
         if pct > NOISE_PCT:
