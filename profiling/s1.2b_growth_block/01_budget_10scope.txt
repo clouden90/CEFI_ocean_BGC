@@ -1,0 +1,40 @@
+# §1.2b 10-scope budget — regenerated from budget.nsys-rep (1-step = 2 COBALT calls; per-call = /2)
+        It is assumed file was previously exported from: exps/OM4.scale128.COBALT.nompi/budget.nsys-rep
+        Consider using --force-export=true if needed.
+ ** CUDA GPU Kernel Summary (cuda_gpu_kern_sum):
+ Time (%)  Total Time (ns)  Instances   Avg (ns)    Med (ns)   Min (ns)  Max (ns)  StdDev (ns)                                   Name                                 
+ --------  ---------------  ---------  ----------  ----------  --------  --------  -----------  ----------------------------------------------------------------------
+     53.0        108881578          2  54440789.0  54440789.0  54423358  54458220      24651.2  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3802_8_ 
+     27.4         56338534          2  28169267.0  28169267.0  28156526  28182008      18018.5  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3896_10_
+      7.5         15364773          2   7682386.5   7682386.5   7672292   7692481      14275.8  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3639_4_ 
+      4.8          9893014          2   4946507.0   4946507.0   4940812   4952202       8053.9  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3493_2_ 
+      2.3          4802249          2   2401124.5   2401124.5   2394645   2407604       9163.4  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3945_14_
+      1.4          2972762          2   1486381.0   1486381.0   1485837   1486925        769.3  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3911_12_
+      1.0          2046033          2   1023016.5   1023016.5   1022761   1023272        361.3  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3746_6_ 
+      1.0          2033521          2   1016760.5   1016760.5   1016296   1017225        656.9  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3983_16_
+      0.9          1779856          2    889928.0    889928.0    888104    891752       2579.5  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4008_18_
+      0.7          1361580          2    680790.0    680790.0    680422    681158        520.4  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4030_20_
+ ** CUDA GPU MemOps Summary (by Time) (cuda_gpu_mem_time_sum):
+ Time (%)  Total Time (ns)  Count  Avg (ns)   Med (ns)   Min (ns)  Max (ns)  StdDev (ns)           Operation          
+ --------  ---------------  -----  ---------  ---------  --------  --------  -----------  ----------------------------
+     57.3        427413639    282  1515651.2  2047121.5      2912   2315187     771099.6  [CUDA memcpy Device-to-Host]
+     42.7        318274408   1392   228645.4      960.0       768   8346470     605959.4  [CUDA memcpy Host-to-Device]
+ ** CUDA GPU MemOps Summary (by Size) (cuda_gpu_mem_size_sum):
+ Total (MB)  Count  Avg (MB)  Med (MB)  Min (MB)  Max (MB)  StdDev (MB)           Operation          
+ ----------  -----  --------  --------  --------  --------  -----------  ----------------------------
+   3773.261   1392     2.711     0.000     0.000    32.321        4.778  [CUDA memcpy Host-to-Device]
+   2995.479    282    10.622    10.774     0.066    10.774        1.264  [CUDA memcpy Device-to-Host]
+ ** CUDA API Summary (cuda_api_sum):
+ Time (%)  Total Time (ns)  Num Calls   Avg (ns)    Med (ns)   Min (ns)  Max (ns)  StdDev (ns)          Name        
+ --------  ---------------  ---------  ----------  ----------  --------  --------  -----------  --------------------
+     44.7        485106612        282   1720236.2   2329559.5     14130   2638302     881311.9  cuMemcpyDtoHAsync_v2
+     32.3        350407078       1392    251729.2      3495.0      2020   8624763     662080.3  cuMemcpyHtoDAsync_v2
+     19.1        206705706        190   1087924.8      7135.0       570  54458168    6290629.9  cuStreamSynchronize 
+      2.5         27211008          1  27211008.0  27211008.0  27211008  27211008          0.0  cuMemHostAlloc      
+      1.0         10509917        119     88318.6     85581.0      2320    336103      42529.8  cuMemAlloc_v2       
+      0.3          2759313          1   2759313.0   2759313.0   2759313   2759313          0.0  cuModuleLoadDataEx  
+      0.1           943688          1    943688.0    943688.0    943688    943688          0.0  cuMemAllocHost_v2   
+      0.0           397683         20     19884.2     23250.0      3270     63510      14304.1  cuLaunchKernel      
+      0.0            63700          1     63700.0     63700.0     63700     63700          0.0  cuMemAllocManaged   
+      0.0             2200          1      2200.0      2200.0      2200      2200          0.0  cuInit              
+      0.0             1850          4       462.5       310.0       150      1080        418.5  cuCtxSetCurrent     

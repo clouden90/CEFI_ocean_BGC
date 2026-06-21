@@ -1,0 +1,13 @@
+== b2b §1.1: 4x4x75, 48hr, GPU(collapse3) vs CPU(same source) vs pristine ref ==
+Sat Jun 20 17:16:40 UTC 2026
+  gpu exit=0 wall=34s
+  cpu exit=0 wall=31s
+  tracer       GPU                       CPU                        |GPU-CPU|/ref   |GPU-ref|/ref   band      verdict
+  dic   1.5036917557803010e+13  1.5036917557803020e+13  6.49e-16      6.49e-16      3.9e-16   PASS
+  alk   1.6266596567821811e+13  1.6266596567821816e+13  3.60e-16      3.60e-16      4.8e-16   PASS
+  no3   1.1316293002204028e+11  1.1316293002204030e+11  1.35e-16      1.35e-16      2.7e-16   PASS
+  po4   7.5339387331740570e+09  7.5339387331740561e+09  1.27e-16      1.27e-16      6.3e-16   PASS
+  o2    1.6808058953017485e+12  1.6808058953017490e+12  2.91e-16      2.91e-16      1.0e-15   PASS
+
+  ===== b2b VERDICT: PASS — GPU §1.1 within round-off of reference =====
+==== DONE Sat Jun 20 17:17:45 UTC 2026 ====

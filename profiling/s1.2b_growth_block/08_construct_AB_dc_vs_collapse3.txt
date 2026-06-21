@@ -1,0 +1,62 @@
+############################## GEIDER kernel -- dc (--set full) ##############################
+  ncu rc=0 (exe MOM6SIS2.dc)
+        Memory Throughput                 %         0.48
+        DRAM Throughput                   %         0.03
+        Duration                         ms       447.89
+        Compute (SM) Throughput           %         6.33
+        Section: GPU Speed Of Light Roofline Chart
+              Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline) for more details  
+              on roofline analysis.                                                                                         
+        Executed Ipc Active   inst/cycle         0.26
+        Issue Slots Busy               %         6.44
+        Memory Throughput               Gbyte/s         1.25
+        L1/TEX Hit Rate                       %        95.86
+        L2 Hit Rate                           %        96.28
+              eligible warps, reduce the time the active warps are stalled by inspecting the top stall reasons on the Warp  
+        Warp Cycles Per Issued Instruction             cycle        15.53
+              On average, each warp of this kernel spends 14.1 cycles being stalled waiting on a fixed latency execution    
+              dependency. Typically, this stall reason should be very low and only shows up as a top contributor in         
+              lower-latency instructions, e.g. by making use of fast math compiler options. This stall type represents      
+        INF   Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on         
+              on each stall reason.                                                                                         
+        Block Size                                                   128
+        Grid Size                                                     75
+        Registers Per Thread             register/thread             144
+              concurrently with other workloads, consider reducing the block size to have at least one block per            
+        Theoretical Occupancy                     %        18.75
+        Achieved Occupancy                        %         6.25
+        Achieved Active Warps Per SM           warp         4.00
+              The difference between calculated theoretical (18.8%) and measured achieved occupancy (6.2%) can be the       
+              hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the number of required      
+
+############################## GEIDER kernel -- cc3 (--set full) ##############################
+  ncu rc=0 (exe MOM6SIS2.cc3)
+        Memory Throughput                 %         2.43
+        DRAM Throughput                   %         0.17
+        Duration                         ms        89.67
+        Compute (SM) Throughput           %        31.77
+        Section: GPU Speed Of Light Roofline Chart
+              Profiling Guide (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline) for more details  
+              on roofline analysis.                                                                                         
+        Executed Ipc Active   inst/cycle         0.75
+        Issue Slots Busy               %        18.87
+        Memory Throughput               Gbyte/s         6.20
+        L1/TEX Hit Rate                       %        94.78
+        L2 Hit Rate                           %        94.74
+              eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+              Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.            
+        Warp Cycles Per Issued Instruction             cycle        15.89
+              On average, each warp of this kernel spends 14.4 cycles being stalled waiting on a fixed latency execution    
+              dependency. Typically, this stall reason should be very low and only shows up as a top contributor in         
+              lower-latency instructions, e.g. by making use of fast math compiler options. This stall type represents      
+        INF   Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on         
+              on each stall reason.                                                                                         
+        Block Size                                                   128
+        Grid Size                                                   9600
+        Registers Per Thread             register/thread             130
+        Theoretical Occupancy                     %        18.75
+        Achieved Occupancy                        %        18.74
+        Achieved Active Warps Per SM           warp        12.00
+              hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the number of required      
+
+==== DONE Fri Jun 19 22:31:33 UTC 2026 ====
