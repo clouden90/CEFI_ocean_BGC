@@ -1,0 +1,170 @@
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3509_2_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         5.13
+    DRAM Throughput                   %         2.23
+    Duration                         ms         8.04
+    Compute (SM) Throughput           %        64.08
+    Executed Ipc Active   inst/cycle         1.55
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        18.02
+    Grid Size                                                   9600
+    Registers Per Thread             register/thread              72
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        43.75
+    Achieved Occupancy                        %        43.59
+          The 7.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (43.8%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3639_4_ (128, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         0.76
+    DRAM Throughput                   %         0.46
+    Duration                         ms        12.56
+    Compute (SM) Throughput           %        10.59
+    Executed Ipc Active   inst/cycle         0.25
+    Warp Cycles Per Issued Instruction             cycle        15.94
+    Grid Size                                                    128
+    Registers Per Thread             register/thread             255
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        12.50
+    Achieved Occupancy                        %         6.25
+          The 2.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (12.5%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3733_6_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         4.16
+    DRAM Throughput                   %         2.49
+    Duration                         ms         1.66
+    Compute (SM) Throughput           %        56.53
+    Executed Ipc Active   inst/cycle         1.36
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        17.40
+    Grid Size                                                   9600
+    Registers Per Thread             register/thread              74
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        37.50
+    Achieved Occupancy                        %        37.09
+          The 6.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (37.5%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3775_8_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         2.43
+    DRAM Throughput                   %         0.17
+    Duration                         ms        89.68
+    Compute (SM) Throughput           %        31.78
+    Executed Ipc Active   inst/cycle         0.75
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        15.89
+    Grid Size                                                   9600
+    Registers Per Thread             register/thread             130
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        18.75
+    Achieved Occupancy                        %        18.74
+          The 3.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3857_10_ (65536, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         0.66
+    DRAM Throughput                   %         0.01
+    Duration                         ms        46.08
+    Compute (SM) Throughput           %        15.19
+    Executed Ipc Active   inst/cycle         0.35
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        56.88
+          affecting occupancy, unless shared memory becomes a new occupancy limiter. Also, try to identify which        
+    Grid Size                                                  65536
+    Registers Per Thread             register/thread              90
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        31.25
+    Achieved Occupancy                        %        31.14
+          The 5.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (31.2%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3872_12_ (38400, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         5.28
+    DRAM Throughput                   %         1.38
+    Duration                         ms         2.42
+    Compute (SM) Throughput           %        58.12
+    Executed Ipc Active   inst/cycle         1.37
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        17.34
+    Grid Size                                                  38400
+    Registers Per Thread             register/thread              74
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        37.50
+    Achieved Occupancy                        %        37.11
+          The 6.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (37.5%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3892_14_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         6.22
+    DRAM Throughput                   %         2.31
+    Duration                         ms         3.92
+    Compute (SM) Throughput           %        78.59
+    Executed Ipc Active   inst/cycle         1.78
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        18.98
+    Grid Size                                                   9600
+    Registers Per Thread             register/thread              50
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        56.25
+    Achieved Occupancy                        %        53.09
+          The 9.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (56.2%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3930_16_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         6.75
+    DRAM Throughput                   %         5.31
+    Duration                         ms         1.64
+    Compute (SM) Throughput           %        81.37
+    Executed Ipc Active   inst/cycle         1.86
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        20.61
+    Grid Size                                                   9600
+    Registers Per Thread             register/thread              48
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        62.50
+    Achieved Occupancy                        %        59.70
+          The 10.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the      
+          hardware maximum of 16. This kernel's theoretical occupancy (62.5%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3955_18_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         5.62
+    DRAM Throughput                   %         4.82
+    Duration                         ms         1.43
+    Compute (SM) Throughput           %        75.73
+    Executed Ipc Active   inst/cycle         1.74
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        19.41
+    Grid Size                                                   9600
+    Registers Per Thread             register/thread              50
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        56.25
+    Achieved Occupancy                        %        52.81
+          The 9.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (56.2%) is limited by the number of required      
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3977_20_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    Memory Throughput                 %         9.87
+    DRAM Throughput                   %         6.01
+    Duration                         ms         1.10
+    Compute (SM) Throughput           %        80.65
+    Executed Ipc Active   inst/cycle         1.86
+          eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+    Warp Cycles Per Issued Instruction             cycle        20.50
+    Grid Size                                                   9600
+    Registers Per Thread             register/thread              48
+    Section: Occupancy
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Theoretical Occupancy                     %        62.50
+    Achieved Occupancy                        %        59.48
+          The 10.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the      
+          hardware maximum of 16. This kernel's theoretical occupancy (62.5%) is limited by the number of required      

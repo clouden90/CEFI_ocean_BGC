@@ -1,0 +1,60 @@
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3509_2_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               655.61
+  gpu__time_duration.sum                                                      ms                 8.04
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst            255590400
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst            513638400
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst            121651200
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3639_4_ (128, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               211.49
+  gpu__time_duration.sum                                                      ms                12.56
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             31997952
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst            225525760
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             47448064
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3733_6_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               151.77
+  gpu__time_duration.sum                                                      ms                 1.66
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             12288000
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             18432000
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3775_8_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               558.10
+  gpu__time_duration.sum                                                      ms                89.69
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst           1343078400
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst           4279910400
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst           1313587200
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3857_10_ (65536, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte                23.60
+  gpu__time_duration.sum                                                      ms                46.07
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst              5505024
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst             12845056
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst              3670016
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3872_12_ (38400, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               121.78
+  gpu__time_duration.sum                                                      ms                 2.42
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst              9830400
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             14745600
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3892_14_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               330.35
+  gpu__time_duration.sum                                                      ms                 3.91
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             34406400
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst             51609600
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             44236800
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3930_16_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               317.69
+  gpu__time_duration.sum                                                      ms                 1.64
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             11059200
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst              9830400
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3955_18_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               251.32
+  gpu__time_duration.sum                                                      ms                 1.43
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst                    0
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst              9830400
+  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3977_20_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+  dram__bytes.sum                                                          Mbyte               240.38
+  gpu__time_duration.sum                                                      ms                 1.10
+  sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             12288000
+  sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst             17203200
+  sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             19660800

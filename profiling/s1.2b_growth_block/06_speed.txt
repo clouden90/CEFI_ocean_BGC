@@ -1,0 +1,20 @@
+===== SPEED: 128x128x75, DT=120, 12 steps =====
+Sat Jun 20 17:16:40 UTC 2026
+u23g14
+GPU 0: NVIDIA H100 NVL (UUID: GPU-7600750a-4114-6f67-a6e3-4bd5b187fb07)
+---- cpu run (/scratch5/purged/Yi-cheng.Teng/tmp/cefi/builds/build/nvhpc-x86-cpu-nompi/ocean_ice/prod/MOM6SIS2) ----
+  cpu wall=613s exit=0
+    Total runtime                            1    612.151090    612.151090    612.151090      0.000000  1.000     0     0     0
+    (Cobalt: carbon calcs)                  12     40.038876     40.038876     40.038876      0.000000  0.065    31     0     0
+    (Cobalt: phytoplankton growth ca        12     72.042578     72.042578     72.042578      0.000000  0.118    31     0     0
+    (Cobalt: calculate diagnostics)         12     24.670923     24.670923     24.670923      0.000000  0.040    31     0     0
+---- gpu run (/scratch5/purged/Yi-cheng.Teng/tmp/cefi/builds/build/nvhpc-x86-sep-nompi/ocean_ice/prod/MOM6SIS2) ----
+  gpu wall=572s exit=0
+    Total runtime                            1    571.783580    571.783580    571.783580      0.000000  1.000     0     0     0
+    (Cobalt: carbon calcs)                  12     40.630100     40.630100     40.630100      0.000000  0.071    31     0     0
+    (Cobalt: phytoplankton growth ca        12     16.635027     16.635027     16.635027      0.000000  0.029    31     0     0
+    (Cobalt: calculate diagnostics)         12     25.887006     25.887006     25.887006      0.000000  0.045    31     0     0
+==== speedup (Cobalt growth clock) ====
+  growth: CPU=12s  GPU=12s
+  speedup = 1.00x
+==== DONE Sat Jun 20 17:36:25 UTC 2026 ====
