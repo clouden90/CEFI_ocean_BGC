@@ -25,9 +25,14 @@ robust comparison.
 | §2 b2b (5 tracers, within-band PASS) | dic 6.5e-16 … o2 2.9e-16 | `05_b2b.txt` | the b2b harness tracer-totals diff vs `gpu_b2b_ref/` |
 | §3e speed (growth 4.33×, CPU 72→GPU 16.6) | — | `06_speed.txt` | `(Cobalt: phytoplankton growth)` mpp_clock, CPU vs GPU |
 | §4 Tier-2 -O2 A/B | restr 76.6 / prist 74.9 s | `07_tier2_O2_objswap.txt` | object-swap growth timer, `out.objO2_{cur,prist}` |
-| §3d construct A/B (dc vs collapse3) | Geider grid 75→9600, 6.25→18.7% occ | `08_construct_AB_dc_vs_collapse3.txt` | `ncu --set full` on `MOM6SIS2.dc` vs `.cc3` |
+| §3d construct A/B (dc vs collapse3) | Geider grid 75→9600, 6.25→18.74% occ, SM 6.33→31.77%, **448→90 ms (ncu) ≈5×** | `08_construct_AB_dc_vs_collapse3.txt` | `ncu --set full` on `MOM6SIS2.dc` vs `.cc3` (§1.1 regression is in `GPU_PORTING.md`, not this archive) |
+| §6 per-section costs | carbon ~40, production ~18, zoo ~16, losses ~13, source/sink ~17 s | `09_section_costs.txt` | mpp_clock COBALT sections from out.speed_gpu (run-variable) |
 
-**Verified (2026-06-21):** files 01/03/04/05/06/07 reproduce the PR numbers exactly. Two run-mixing slips were
-found by this re-verification and corrected in the PR: (a) coupled CPU total 619→**612**; (b) merged
-transfer-time 308→**331 ms** (−17%→−11%) — both *run-variable* metrics pulled from a since-overwritten run;
-deterministic counts/bytes/syncs and all headline numbers (4.33×, occupancies, b2b) were exact.
+**Full re-verification (2026-06-21):** EVERY number re-derived from the archived files (01–09). **4 issues found
+& corrected** in the PR (all *run-variable* or *un-archived-source* metrics — never the deterministic/headline numbers):
+(a) coupled CPU total 619→**612**; (b) merged transfer-time 308→**331 ms** (−17%→−11%, since-overwritten run);
+(c) §3d now cites the **archived ncu A/B** (448→90 ms, grid 75→9600) instead of un-archived nsys (272→54), §1.1
+referred to `GPU_PORTING.md`; (d) §6 production 20→**18 s**, other losses 15→**13 s** (matched to archived `09`).
+All **headline + deterministic** numbers verified **EXACT**: 4.33×, the full §3b 80-cell per-kernel table, §3c
+roofline, §2 b2b within-band, all copies/bytes/syncs. Run-variable metrics (transfer time, wall, section
+timers) are reconciled to the archived run of record.

@@ -1,0 +1,16 @@
+# §6 per-section COBALT cost (GPU build, 128/12-step) — mpp_clock breakdown from out.speed_gpu
+(Cobalt: carbon calcs)                  12     40.630100     40.630100     40.630100      0.000000  0.071    31     0     0
+(Cobalt: phytoplankton growth ca        12     16.635027     16.635027     16.635027      0.000000  0.029    31     0     0
+(Cobalt: bacteria growth calcs)         12      1.596241      1.596241      1.596241      0.000000  0.003    31     0     0
+(Cobalt: zooplankton calculation        12     15.686844     15.686844     15.686844      0.000000  0.027    31     0     0
+(Cobalt: other losses)                  12     13.409836     13.409836     13.409836      0.000000  0.023    31     0     0
+(Cobalt: production loop)               12     18.308647     18.308647     18.308647      0.000000  0.032    31     0     0
+(Cobalt: ballasting loops)              12      4.200425      4.200425      4.200425      0.000000  0.007    31     0     0
+(Cobalt: source/sink loop 1)            12      2.970502      2.970502      2.970502      0.000000  0.005    31     0     0
+(Cobalt: source/sink loop 2)            12      5.257399      5.257399      5.257399      0.000000  0.009    31     0     0
+(Cobalt: source/sink loop 3)            12      2.391587      2.391587      2.391587      0.000000  0.004    31     0     0
+(Cobalt: source/sink loop 4)            12      0.586907      0.586907      0.586907      0.000000  0.001    31     0     0
+(Cobalt: source/sink loop 5)            12      1.493732      1.493732      1.493732      0.000000  0.003    31     0     0
+(Cobalt: source/sink loop 6)            12      4.743855      4.743855      4.743855      0.000000  0.008    31     0     0
+(Cobalt: send diagnostics)              12      1.796588      1.796588      1.796588      0.000000  0.003    31     0     0
+(Cobalt: calculate diagnostics)         12     25.887006     25.887006     25.887006      0.000000  0.045    31     0     0
