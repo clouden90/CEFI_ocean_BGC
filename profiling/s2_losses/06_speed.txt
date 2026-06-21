@@ -1,0 +1,14 @@
+===== SPEED §2 other losses (all sections): 128x128x75, 12 steps, CPU vs GPU =====
+    [cpu] Total runtime                            1    619.801890    619.801890    619.801890      0.000000  1.000     0     0     0
+    [cpu] (Cobalt: carbon calcs)                  12     40.927199     40.927199     40.927199      0.000000  0.066    31     0     0
+    [cpu] (Cobalt: phytoplankton growth ca        12     75.350833     75.350833     75.350833      0.000000  0.122    31     0     0
+    [cpu] (Cobalt: zooplankton calculation        12     14.842286     14.842286     14.842286      0.000000  0.024    31     0     0
+    [cpu] (Cobalt: other losses)                  12     11.993365     11.993365     11.993365      0.000000  0.019    31     0     0
+    [cpu] (Cobalt: production loop)               12     16.611727     16.611727     16.611727      0.000000  0.027    31     0     0
+    [gpu] Total runtime                            1    526.976175    526.976175    526.976175      0.000000  1.000     0     0     0
+    [gpu] (Cobalt: carbon calcs)                  12     40.518512     40.518512     40.518512      0.000000  0.077    31     0     0
+    [gpu] (Cobalt: phytoplankton growth ca        12     15.541649     15.541649     15.541649      0.000000  0.029    31     0     0
+    [gpu] (Cobalt: zooplankton calculation        12      1.634511      1.634511      1.634511      0.000000  0.003    31     0     0
+    [gpu] (Cobalt: other losses)                  12      2.808357      2.808357      2.808357      0.000000  0.005    31     0     0
+    [gpu] (Cobalt: production loop)               12      1.981126      1.981126      1.981126      0.000000  0.004    31     0     0
+===== other losses: CPU=11.99s  GPU=2.81s  speedup=4.27x =====

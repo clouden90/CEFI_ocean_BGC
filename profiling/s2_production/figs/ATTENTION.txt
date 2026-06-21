@@ -8,6 +8,6 @@
   - production loop           7.84× FASTER  (ported ✓)
 
 ## Under-utilized GPU kernels (SM-SOL < 35% -> tuning candidates)
-  - A          SM-SOL  10.6%  ⚠
-  - Geider     SM-SOL  31.8%  ⚠
-  - E          SM-SOL  15.2%  ⚠
+  - A          SM-SOL  10.6%  ⚠ TUNE (7.7 ms/call)
+  - Geider     SM-SOL  31.8%  ⚠ TUNE (54.4 ms/call)
+  - E          SM-SOL  15.2%  ⚠ TUNE (28.1 ms/call)

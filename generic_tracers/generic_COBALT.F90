@@ -4571,7 +4571,26 @@ contains
     !
 
     call mpp_clock_begin(id_clock_other_losses)
-
+    ! === GPU §2 other losses: two pointwise kernels in ONE residency scope. Loop 1 = 3D (k,j,i) aggregation/
+    !     mortality/virus/exudation losses (collapse(3), private n + growth_ratio). Loop 2 = 2D surface (j,i)
+    !     nepheloid-layer vmove zeroing (collapse(2)); vmove stays resident loop1->loop2. exit data BEFORE the
+    !     host g_tracer_set_values calls (they read vmove). No shared scratch (no firstprivate). Has ** (pow) ->
+    !     b2b WITHIN-BAND. Accumulators jdissloss_si (carries growth §1.3 value, L4630 +=) and jexuloss_fe
+    !     (carries growth L3971 value, += ) -> map(to:) AND from:; fresh outputs -> alloc:/from:. mem:separate.
+    !$omp target enter data map(to: cobalt, phyto, bact, hblt_depth)
+    !$omp target enter data map(to: cobalt%expkT, cobalt%zt)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%f_n,phyto(n)%q_p_2_n, &
+      !$omp&   phyto(n)%q_fe_2_n,phyto(n)%q_si_2_n,phyto(n)%juptake_no3,phyto(n)%juptake_nh4,phyto(n)%juptake_n2, &
+      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%jdissloss_si,phyto(n)%jexuloss_fe)
+      !$omp target enter data map(alloc: phyto(n)%stress_fac,phyto(n)%jaggloss_n,phyto(n)%jaggloss_p, &
+      !$omp&   phyto(n)%jaggloss_fe,phyto(n)%jaggloss_sio2,phyto(n)%jmortloss_n,phyto(n)%jmortloss_p, &
+      !$omp&   phyto(n)%jmortloss_fe,phyto(n)%vmove,phyto(n)%jvirloss_n,phyto(n)%jvirloss_p, &
+      !$omp&   phyto(n)%jvirloss_fe,phyto(n)%jvirloss_sio2,phyto(n)%jexuloss_n,phyto(n)%jexuloss_p)
+    enddo
+    !$omp target enter data map(to: bact(1)%temp_lim,bact(1)%f_n)
+    !$omp target enter data map(alloc: bact(1)%jvirloss_n,bact(1)%jvirloss_p)
+    !$omp target teams loop collapse(3) private(n,growth_ratio)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec; !{
 
        ! 3.2.1 Calculate losses of phytoplankton to aggregation and mortality and the rate of direct sinking.
@@ -4682,6 +4701,7 @@ contains
     ! the depth is less than twice the depth of active mixing.  Cells are otherwise assumed to sink into the
     ! benthos and be remineralized along with sinking detritus.
 
+    !$omp target teams loop collapse(2) private(n)
     do j = jsc, jec ; do i = isc, iec   !{
        do n = 1,NUM_PHYTO
          if (cobalt%zt(i,j,nk).le.(2.0*hblt_depth(i,j))) then
@@ -4689,6 +4709,18 @@ contains
          endif
        enddo
     enddo; enddo !} i,j
+    ! === GPU §2 other-losses MERGE-out: outputs (incl vmove) back to host before g_tracer_set_values ===
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%stress_fac,phyto(n)%jaggloss_n,phyto(n)%jaggloss_p, &
+      !$omp&   phyto(n)%jaggloss_fe,phyto(n)%jaggloss_sio2,phyto(n)%jmortloss_n,phyto(n)%jmortloss_p, &
+      !$omp&   phyto(n)%jmortloss_fe,phyto(n)%jdissloss_si,phyto(n)%vmove,phyto(n)%jvirloss_n,phyto(n)%jvirloss_p, &
+      !$omp&   phyto(n)%jvirloss_fe,phyto(n)%jvirloss_sio2,phyto(n)%jexuloss_n,phyto(n)%jexuloss_p,phyto(n)%jexuloss_fe)
+      !$omp target exit data map(delete: phyto(n)%f_mu_mem,phyto(n)%P_C_max,phyto(n)%f_n,phyto(n)%q_p_2_n, &
+      !$omp&   phyto(n)%q_fe_2_n,phyto(n)%q_si_2_n,phyto(n)%juptake_no3,phyto(n)%juptake_nh4,phyto(n)%juptake_n2, &
+      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe)
+    enddo
+    !$omp target exit data map(from: bact(1)%jvirloss_n,bact(1)%jvirloss_p)
+    !$omp target exit data map(delete: bact(1)%temp_lim,bact(1)%f_n,cobalt%expkT,cobalt%zt,hblt_depth,cobalt,phyto,bact)
 
     ! set the direct sinking rates for phytoplankton
     call g_tracer_set_values(tracer_list,'ndi','vmove',phyto(DIAZO)%vmove,isd,jsd)

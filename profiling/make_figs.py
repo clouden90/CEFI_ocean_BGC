@@ -26,17 +26,18 @@ import matplotlib.pyplot as plt
 SECTION_MAP = {
     "F1L3510": "§1.1", "F1L3640": "A", "F1L3734": "B", "F1L3776": "Geider",
     "F1L3858": "E", "F1L3873": "F", "F1L3893": "§1.3N", "F1L3931": "§1.3P",
-    "F1L3956": "§1.3Fe", "F1L3978": "§1.3Si", "F1L4278": "zoo",
+    "F1L3956": "§1.3Fe", "F1L3978": "§1.3Si", "F1L4278": "zoo", "F1L4593": "losses", "F1L4704": "losses2D",
     # production's directive line shifts as ports add code above it; keep all aliases so every
     # archive's CSV (profiled at its line of the day) still resolves: §2 prod=F1L4707, post-zoo=F1L4748
-    "F1L4707": "production", "F1L4748": "production",
+    "F1L4707": "production", "F1L4748": "production", "F1L4780": "production",
 }
-HIGHLIGHT = "zoo"                # the kernel this PR adds (cosmetic: which SOL bar is red)
+HIGHLIGHT = "losses"                # the kernel this PR adds (cosmetic: which SOL bar is red)
 # A section is "ported" iff its GPU time is well below CPU. INFERRED FROM THE DATA (not a global list) so
 # each archive's figure reflects ITS OWN era — e.g. s2_production's fig correctly shows zoo as un-ported,
 # while s2_zoo's shows it ported. Ported sections run 4-8x (ratio ~0.1-0.25); un-ported are flat/slower (~1+).
 PORTED_RATIO = 0.7
 def is_ported(cpu, gpu): return bool(cpu) and gpu/cpu < PORTED_RATIO
+NEGLIGIBLE_MS = 0.5   # a low-SM kernel below this nsys ms/call is grid-starved-but-cheap, NOT a tuning target
 # Attention thresholds (the review discipline: every port flags what needs work)
 NOISE_PCT   = 5.0    # un-ported section slower than CPU by > this % on the GPU build -> flag
 LOW_SOL_PCT = 35.0   # kernel SM-SOL below this -> under-utilized, flag for tuning
@@ -165,7 +166,17 @@ def fig_roofline(roof, det, outdir):
     ax.grid(True, which="both", ls=":", alpha=0.4); fig.tight_layout()
     p = os.path.join(outdir, "fig_roofline.png"); fig.savefig(p, dpi=130); plt.close(fig); return p
 
-def attention_report(speed, det, outdir):
+def parse_nsys_ktime(path):
+    """nsys kern_sum block in the perkernel/budget log -> {tag: ms/call} (total ns ÷ 2 calls ÷ 1e6)."""
+    out = {}
+    for ln in open(path):
+        m = re.search(r"^\s*[\d.]+\s+(\d+)\s+2\s+[\d.]+.*F1L(\d+)", ln)
+        if m:
+            tag = SECTION_MAP.get("F1L"+m.group(2))
+            if tag: out[tag] = int(m.group(1))/2/1e6
+    return out
+
+def attention_report(speed, det, outdir, ktime=None):
     """The review discipline: after every port, auto-flag what needs attention so we don't have to
     eyeball the figures. Writes figs/ATTENTION.txt and prints. Two checks:
       (1) un-ported sections that got SLOWER on the GPU build by > noise (GPU-build CPU-section drift);
@@ -183,13 +194,19 @@ def attention_report(speed, det, outdir):
             lines.append(f"  - {k:24s} {pct:+5.0f}% (within noise)")
     if not any1: lines.append("  (none above noise)")
     lines += ["", "## Under-utilized GPU kernels (SM-SOL < %.0f%% -> tuning candidates)" % LOW_SOL_PCT]
-    any2 = False
+    any2 = False; seen = set()
     for t in SECTION_MAP.values():
-        if t in det:
+        if t in det and t not in seen:
+            seen.add(t)
             sol = det[t].get("Compute (SM) Throughput", 0)
             if sol < LOW_SOL_PCT:
-                lines.append(f"  - {t:10s} SM-SOL {sol:5.1f}%  ⚠"); any2 = True
-    if not any2: lines.append("  (all ported kernels above threshold)")
+                ms = (ktime or {}).get(t)
+                if ms is not None and ms < NEGLIGIBLE_MS:
+                    lines.append(f"  - {t:10s} SM-SOL {sol:5.1f}%  ({ms:.3f} ms/call — grid-starved but NEGLIGIBLE, skip)")
+                else:
+                    tm = f"{ms:.1f} ms/call" if ms is not None else "time n/a"
+                    lines.append(f"  - {t:10s} SM-SOL {sol:5.1f}%  ⚠ TUNE ({tm})"); any2 = True
+    if not any2: lines.append("  (no significant under-utilized kernel)")
     txt = "\n".join(lines) + "\n"
     open(os.path.join(outdir, "ATTENTION.txt"), "w").write(txt)
     print("\n" + txt)
@@ -214,7 +231,8 @@ def main():
     if det:   made.append(fig_sol(det, outdir))
     if roof:  made.append(fig_roofline(roof, det, outdir))
     for m in made: print(f"  wrote {m}")
-    if speed or det: attention_report(speed, det, outdir)
+    ktime = parse_nsys_ktime(_find(base, "*perkernel*budget*.txt", "03_*.txt"))
+    if speed or det: attention_report(speed, det, outdir, ktime)
     print(f"  DONE — {len(made)} figures in {outdir}")
 
 if __name__ == "__main__":

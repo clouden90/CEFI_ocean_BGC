@@ -35,21 +35,33 @@ def parse_b2b(path):
 PROD = {
   "dir": "s2_production",
   "speed": {"production loop": (16.54, 2.11, 7.84)},          # cpu, gpu, speedup
-  "kernel": {"tag": "production", "Grid Size": 9600, "Registers Per Thread": 74,
+  "kernels": [{"tag": "production", "Grid Size": 9600, "Registers Per Thread": 74,
              "Achieved Occupancy": 36.45, "Theoretical Occupancy": 37.50,
              "Compute (SM) Throughput": 54.55, "DRAM Throughput": 2.0,
-             "Executed Ipc Active": 1.28, "Warp Cycles Per Issued Instruction": 18.31, "L2 Hit Rate": 60.0},
+             "Executed Ipc Active": 1.28, "Warp Cycles Per Issued Instruction": 18.31, "L2 Hit Rate": 60.0}],
   "roofline": {"production": (0.24, 17.6)},                   # AI, GFLOP/s
   "b2b": {"dic": 6.49e-16, "alk": 3.60e-16, "no3": 1.35e-16, "po4": 1.27e-16, "o2": 2.91e-16},
 }
 ZOO = {
   "dir": "s2_zoo",
   "speed": {"zooplankton": (14.58, 1.74, 8.37)},
-  "kernel": {"tag": "zoo", "Grid Size": 9600, "Registers Per Thread": 136,
+  "kernels": [{"tag": "zoo", "Grid Size": 9600, "Registers Per Thread": 136,
              "Achieved Occupancy": 18.63, "Theoretical Occupancy": 18.75,
              "Compute (SM) Throughput": 29.23, "DRAM Throughput": 1.59,
-             "Executed Ipc Active": 0.70, "Warp Cycles Per Issued Instruction": 17.03, "L2 Hit Rate": 89.34},
+             "Executed Ipc Active": 0.70, "Warp Cycles Per Issued Instruction": 17.03, "L2 Hit Rate": 89.34}],
   "roofline": {"zoo": (None, None)},                          # not separately reported; skip values, just presence
+  "b2b": {"dic": 1.30e-16, "alk": 3.60e-16, "no3": 0.0, "po4": 2.53e-16, "o2": 1.45e-16},
+}
+LOSSES = {
+  "dir": "s2_losses",
+  "speed": {"other losses": (11.99, 2.81, 4.27)},
+  "kernels": [{"tag": "losses", "Grid Size": 9600, "Registers Per Thread": 56,
+               "Achieved Occupancy": 53.49, "Theoretical Occupancy": 56.25,
+               "Compute (SM) Throughput": 75.36, "DRAM Throughput": 3.47, "Executed Ipc Active": 1.72},
+              {"tag": "losses2D", "Grid Size": 128, "Registers Per Thread": 56,
+               "Achieved Occupancy": 6.23, "Compute (SM) Throughput": 8.13,
+               "DRAM Throughput": 0.23, "Executed Ipc Active": 0.22}],
+  "roofline": {"losses": (None, None)},
   "b2b": {"dic": 1.30e-16, "alk": 3.60e-16, "no3": 0.0, "po4": 2.53e-16, "o2": 1.45e-16},
 }
 
@@ -67,12 +79,13 @@ def verify(C):
         chk(f"speed {sec} CPU", cpu, a[0] if a else None)
         chk(f"speed {sec} GPU", gpu, a[1] if a else None)
         chk(f"speed {sec} speedup", sp, (a[0]/a[1]) if a else None, tol=0.03)
-    # per-kernel ncu
-    k = C["kernel"]; tag = k["tag"]; d = det.get(tag, {})
-    for metric, claim in k.items():
-        if metric == "tag": continue
-        abst = 0.15 if metric == "DRAM Throughput" else (0.1 if "Occupancy" in metric or metric=="L2 Hit Rate" else 0.0)
-        chk(f"{tag}.{metric}", claim, d.get(metric), tol=0.02, abstol=abst)
+    # per-kernel ncu (one or more kernels per archive)
+    for k in C["kernels"]:
+        tag = k["tag"]; d = det.get(tag, {})
+        for metric, claim in k.items():
+            if metric == "tag": continue
+            abst = 0.15 if metric == "DRAM Throughput" else (0.1 if "Occupancy" in metric or metric=="L2 Hit Rate" else 0.0)
+            chk(f"{tag}.{metric}", claim, d.get(metric), tol=0.02, abstol=abst)
     # roofline (skip if value None — just assert presence)
     for tag, (ai, gf) in C["roofline"].items():
         if ai is None:
@@ -90,6 +103,7 @@ def verify(C):
 
 verify(PROD)
 verify(ZOO)
+verify(LOSSES)
 print("\n================================ RESULT ================================")
 if fails: print(f"  *** {len(fails)} MISMATCH(es): {fails}"); sys.exit(1)
 print("  ALL §2 REPORTED METRICS MATCH THE COMMITTED ARCHIVE ✓"); sys.exit(0)

@@ -1,0 +1,572 @@
+Sun Jun 21 12:25:40 UTC 2026
+EXE: /scratch5/purged/Yi-cheng.Teng/tmp/cefi/builds/build/nvhpc-x86-sep-nompi/ocean_ice/prod/MOM6SIS2
+===== (A) --set full: all 11 cobalt kernels (one COBALT call) =====
+set-full rc=0
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3510_2_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         5.11
+      DRAM Throughput                   %         2.24
+      Duration                         ms         8.04
+      Compute (SM) Throughput           %        64.02
+      Executed Ipc Active   inst/cycle         1.54
+      Memory Throughput               Gbyte/s        81.77
+      L2 Hit Rate                           %        71.29
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        18.03
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              72
+      Theoretical Occupancy                     %        43.75
+      Achieved Occupancy                        %        43.48
+            hardware maximum of 16. This kernel's theoretical occupancy (43.8%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3640_4_ (128, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         0.76
+      DRAM Throughput                   %         0.46
+      Duration                         ms        12.54
+      Compute (SM) Throughput           %        10.60
+      Executed Ipc Active   inst/cycle         0.25
+      Memory Throughput               Gbyte/s        16.89
+      L2 Hit Rate                           %        64.27
+      Warp Cycles Per Issued Instruction             cycle        15.94
+      Block Size                                                   128
+      Grid Size                                                    128
+      Registers Per Thread             register/thread             255
+            concurrently with other workloads, consider reducing the block size to have at least one block per            
+      Theoretical Occupancy                     %        12.50
+      Achieved Occupancy                        %         6.25
+            hardware maximum of 16. This kernel's theoretical occupancy (12.5%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3734_6_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         4.16
+      DRAM Throughput                   %         2.51
+      Duration                         ms         1.66
+      Compute (SM) Throughput           %        56.49
+      Executed Ipc Active   inst/cycle         1.36
+      Memory Throughput               Gbyte/s        91.57
+      L2 Hit Rate                           %        58.69
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        17.40
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              74
+      Theoretical Occupancy                     %        37.50
+      Achieved Occupancy                        %        37.03
+            hardware maximum of 16. This kernel's theoretical occupancy (37.5%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3776_8_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         2.43
+      DRAM Throughput                   %         0.17
+      Duration                         ms        89.67
+      Compute (SM) Throughput           %        31.77
+      Executed Ipc Active   inst/cycle         0.75
+      Memory Throughput               Gbyte/s         6.22
+      L2 Hit Rate                           %        94.78
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        15.89
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread             130
+      Theoretical Occupancy                     %        18.75
+      Achieved Occupancy                        %        18.74
+            hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3858_10_ (65536, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         0.66
+      DRAM Throughput                   %         0.01
+      Duration                         ms        46.09
+      Compute (SM) Throughput           %        15.19
+      Executed Ipc Active   inst/cycle         0.35
+      Memory Throughput               Mbyte/s       507.51
+      L2 Hit Rate                           %        98.14
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        56.85
+            Whenever possible, try to divide up the work into blocks of uniform workloads. If the block size is 512       
+      Block Size                                                   128
+      Grid Size                                                  65536
+      Registers Per Thread             register/thread              90
+      Theoretical Occupancy                     %        31.25
+      Achieved Occupancy                        %        31.15
+            hardware maximum of 16. This kernel's theoretical occupancy (31.2%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3873_12_ (38400, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         5.47
+      DRAM Throughput                   %         1.38
+      Duration                         ms         2.41
+      Compute (SM) Throughput           %        58.12
+      Executed Ipc Active   inst/cycle         1.37
+      Memory Throughput               Gbyte/s        50.43
+      L2 Hit Rate                           %        83.93
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        17.34
+      Block Size                                                   128
+      Grid Size                                                  38400
+      Registers Per Thread             register/thread              74
+      Theoretical Occupancy                     %        37.50
+      Achieved Occupancy                        %        37.02
+            hardware maximum of 16. This kernel's theoretical occupancy (37.5%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3893_14_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         6.20
+      DRAM Throughput                   %         2.31
+      Duration                         ms         3.91
+      Compute (SM) Throughput           %        78.30
+      Executed Ipc Active   inst/cycle         1.78
+      Memory Throughput               Gbyte/s        84.53
+      L2 Hit Rate                           %        69.30
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        19.07
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              50
+      Theoretical Occupancy                     %        56.25
+      Achieved Occupancy                        %        53.09
+            hardware maximum of 16. This kernel's theoretical occupancy (56.2%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3931_16_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         6.74
+      DRAM Throughput                   %         5.33
+      Duration                         ms         1.63
+      Compute (SM) Throughput           %        81.38
+      Executed Ipc Active   inst/cycle         1.85
+      Memory Throughput               Gbyte/s       194.64
+      L2 Hit Rate                           %        49.80
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        20.58
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              48
+      Theoretical Occupancy                     %        62.50
+      Achieved Occupancy                        %        59.71
+            hardware maximum of 16. This kernel's theoretical occupancy (62.5%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3956_18_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         5.60
+      DRAM Throughput                   %         4.83
+      Duration                         ms         1.43
+      Compute (SM) Throughput           %        75.58
+      Executed Ipc Active   inst/cycle         1.74
+      Memory Throughput               Gbyte/s       176.59
+      L2 Hit Rate                           %        57.94
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        19.43
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              50
+      Theoretical Occupancy                     %        56.25
+      Achieved Occupancy                        %        52.81
+            hardware maximum of 16. This kernel's theoretical occupancy (56.2%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3978_20_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         9.84
+      DRAM Throughput                   %         6.03
+      Duration                         ms         1.09
+      Compute (SM) Throughput           %        80.35
+      Executed Ipc Active   inst/cycle         1.85
+      Memory Throughput               Gbyte/s       220.31
+      L2 Hit Rate                           %        66.52
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        20.55
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              48
+      Theoretical Occupancy                     %        62.50
+      Achieved Occupancy                        %        59.48
+            hardware maximum of 16. This kernel's theoretical occupancy (62.5%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4278_22_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         4.01
+      DRAM Throughput                   %         1.59
+      Duration                         ms        45.27
+      Compute (SM) Throughput           %        29.22
+      Executed Ipc Active   inst/cycle         0.70
+      Memory Throughput               Gbyte/s        58.29
+      L2 Hit Rate                           %        89.29
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        17.04
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread             136
+      Theoretical Occupancy                     %        18.75
+      Achieved Occupancy                        %        18.64
+            hardware maximum of 16. This kernel's theoretical occupancy (18.8%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4593_24_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         5.60
+      DRAM Throughput                   %         3.47
+      Duration                         ms        11.46
+      Compute (SM) Throughput           %        75.36
+      Executed Ipc Active   inst/cycle         1.72
+      Memory Throughput               Gbyte/s       126.95
+      L2 Hit Rate                           %        65.73
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        19.82
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              56
+      Theoretical Occupancy                     %        56.25
+      Achieved Occupancy                        %        53.49
+            hardware maximum of 16. This kernel's theoretical occupancy (56.2%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4704_26_ (128, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         2.49
+      DRAM Throughput                   %         0.23
+      Duration                         us        35.20
+      Compute (SM) Throughput           %         8.13
+      Executed Ipc Active   inst/cycle         0.22
+      Memory Throughput               Gbyte/s         8.55
+      L2 Hit Rate                           %        92.35
+      Warp Cycles Per Issued Instruction             cycle        18.05
+      Block Size                                                   128
+      Grid Size                                                    128
+      Registers Per Thread             register/thread              56
+            concurrently with other workloads, consider reducing the block size to have at least one block per            
+      Theoretical Occupancy                     %        56.25
+      Achieved Occupancy                        %         6.23
+            The difference between calculated theoretical (56.2%) and measured achieved occupancy (6.2%) can be the       
+            hardware maximum of 16. This kernel's theoretical occupancy (56.2%) is limited by the number of required      
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4780_28_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+      Memory Throughput                 %         5.09
+      DRAM Throughput                   %         2.01
+      Duration                         ms        30.75
+      Compute (SM) Throughput           %        54.38
+      Executed Ipc Active   inst/cycle         1.27
+      Memory Throughput               Gbyte/s        73.62
+      L2 Hit Rate                           %        60.17
+            eligible warps, avoid possible load imbalances due to highly different execution durations per warp.          
+      Warp Cycles Per Issued Instruction             cycle        18.36
+      Block Size                                                   128
+      Grid Size                                                   9600
+      Registers Per Thread             register/thread              74
+      Theoretical Occupancy                     %        37.50
+      Achieved Occupancy                        %        36.33
+            hardware maximum of 16. This kernel's theoretical occupancy (37.5%) is limited by the number of required      
+  CSV: 1310 lines -> s2l_full14.csv
+
+===== (B) ROOFLINE metrics: DP-FLOPs + DRAM bytes =====
+roofline rc=0
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3510_2_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                13.67
+    dram__bytes.max                                                          Mbyte                14.18
+    dram__bytes.min                                                          Mbyte                 7.04
+    dram__bytes.sum                                                          Mbyte               656.23
+    gpu__time_duration.avg                                                      ms                 8.04
+    gpu__time_duration.max                                                      ms                 8.04
+    gpu__time_duration.min                                                      ms                 8.04
+    gpu__time_duration.sum                                                      ms                 8.04
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst           1936290.91
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst              2050048
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst              1863680
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst            255590400
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst              3891200
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst              4119808
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst              3745280
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst            513638400
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst               921600
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst               975744
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst               887040
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst            121651200
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3640_4_ (128, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                 4.41
+    dram__bytes.max                                                          Mbyte                 4.53
+    dram__bytes.min                                                          Mbyte                 2.24
+    dram__bytes.sum                                                          Mbyte               211.45
+    gpu__time_duration.avg                                                      ms                12.54
+    gpu__time_duration.max                                                      ms                12.54
+    gpu__time_duration.min                                                      ms                12.54
+    gpu__time_duration.sum                                                      ms                12.54
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst            242408.73
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst               249984
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             31997952
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst           1708528.48
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst              1761920
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst            225525760
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst            359455.03
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst               370688
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             47448064
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3734_6_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                 3.16
+    dram__bytes.max                                                          Mbyte                 3.28
+    dram__bytes.min                                                          Mbyte                 1.61
+    dram__bytes.sum                                                          Mbyte               151.61
+    gpu__time_duration.avg                                                      ms                 1.66
+    gpu__time_duration.max                                                      ms                 1.66
+    gpu__time_duration.min                                                      ms                 1.66
+    gpu__time_duration.sum                                                      ms                 1.66
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst             93090.91
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst                99840
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                92160
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             12288000
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst            139636.36
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst               149760
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst               138240
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             18432000
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3776_8_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                11.64
+    dram__bytes.max                                                          Mbyte                12.00
+    dram__bytes.min                                                          Mbyte                 5.93
+    dram__bytes.sum                                                          Mbyte               558.55
+    gpu__time_duration.avg                                                      ms                89.68
+    gpu__time_duration.max                                                      ms                89.68
+    gpu__time_duration.min                                                      ms                89.68
+    gpu__time_duration.sum                                                      ms                89.68
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst          10174836.36
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst             10492800
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst             10073088
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst           1343078400
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst          32423563.64
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst             33436800
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst             32099328
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst           4279910400
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst           9951418.18
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst             10262400
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst              9851904
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst           1313587200
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3858_10_ (65536, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Kbyte               493.26
+    dram__bytes.max                                                          Kbyte               563.46
+    dram__bytes.min                                                          Kbyte               252.42
+    dram__bytes.sum                                                          Mbyte                23.68
+    gpu__time_duration.avg                                                      ms                46.07
+    gpu__time_duration.max                                                      ms                46.07
+    gpu__time_duration.min                                                      ms                46.07
+    gpu__time_duration.sum                                                      ms                46.07
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst             41704.73
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst                41916
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                41580
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst              5505024
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst             97311.03
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst                97804
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst                97020
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst             12845056
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst             27803.15
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst                27944
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst                27720
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst              3670016
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3873_12_ (38400, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                 2.53
+    dram__bytes.max                                                          Mbyte                 2.64
+    dram__bytes.min                                                          Mbyte                 1.29
+    dram__bytes.sum                                                          Mbyte               121.35
+    gpu__time_duration.avg                                                      ms                 2.41
+    gpu__time_duration.max                                                      ms                 2.41
+    gpu__time_duration.min                                                      ms                 2.41
+    gpu__time_duration.sum                                                      ms                 2.41
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst             74472.73
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst                75264
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                72192
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst              9830400
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst            111709.09
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst               112896
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst               108288
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             14745600
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3893_14_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                 6.89
+    dram__bytes.max                                                          Mbyte                 7.14
+    dram__bytes.min                                                          Mbyte                 3.54
+    dram__bytes.sum                                                          Mbyte               330.50
+    gpu__time_duration.avg                                                      ms                 3.91
+    gpu__time_duration.max                                                      ms                 3.91
+    gpu__time_duration.min                                                      ms                 3.91
+    gpu__time_duration.sum                                                      ms                 3.91
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst            260654.55
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst               275968
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst               250880
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             34406400
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst            390981.82
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst               413952
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst               376320
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst             51609600
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst            335127.27
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst               354816
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst               322560
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             44236800
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3931_16_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                 6.62
+    dram__bytes.max                                                          Mbyte                 6.88
+    dram__bytes.min                                                          Mbyte                 3.42
+    dram__bytes.sum                                                          Mbyte               317.73
+    gpu__time_duration.avg                                                      ms                 1.63
+    gpu__time_duration.max                                                      ms                 1.63
+    gpu__time_duration.min                                                      ms                 1.63
+    gpu__time_duration.sum                                                      ms                 1.63
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst             83781.82
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst                85248
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                79488
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             11059200
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst             74472.73
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst                75776
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst                70656
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst              9830400
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3956_18_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                 5.24
+    dram__bytes.max                                                          Mbyte                 5.46
+    dram__bytes.min                                                          Mbyte                 2.69
+    dram__bytes.sum                                                          Mbyte               251.49
+    gpu__time_duration.avg                                                      ms                 1.43
+    gpu__time_duration.max                                                      ms                 1.43
+    gpu__time_duration.min                                                      ms                 1.43
+    gpu__time_duration.sum                                                      ms                 1.43
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst                    0
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst                    0
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst             74472.73
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst                78848
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst                72704
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst              9830400
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3978_20_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                 5.01
+    dram__bytes.max                                                          Mbyte                 5.22
+    dram__bytes.min                                                          Mbyte                 2.57
+    dram__bytes.sum                                                          Mbyte               240.28
+    gpu__time_duration.avg                                                      ms                 1.09
+    gpu__time_duration.max                                                      ms                 1.09
+    gpu__time_duration.min                                                      ms                 1.09
+    gpu__time_duration.sum                                                      ms                 1.09
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst             93090.91
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst                97280
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                87040
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             12288000
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst            130327.27
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst               136192
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst               121856
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst             17203200
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst            148945.45
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst               155648
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst               139264
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst             19660800
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4278_22_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                54.96
+    dram__bytes.max                                                          Mbyte                57.35
+    dram__bytes.min                                                          Mbyte                28.04
+    dram__bytes.sum                                                          Gbyte                 2.64
+    gpu__time_duration.avg                                                      ms                45.27
+    gpu__time_duration.max                                                      ms                45.27
+    gpu__time_duration.min                                                      ms                45.27
+    gpu__time_duration.sum                                                      ms                45.27
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst          16959425.94
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst             17502720
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst             16775168
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst           2238644224
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst          17983798.30
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst             18571776
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst             17774464
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst           2373861376
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst              5550080
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst              5744256
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst              5471488
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst            732610560
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4593_24_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                30.30
+    dram__bytes.max                                                          Mbyte                31.11
+    dram__bytes.min                                                          Mbyte                15.42
+    dram__bytes.sum                                                          Gbyte                 1.45
+    gpu__time_duration.avg                                                      ms                11.40
+    gpu__time_duration.max                                                      ms                11.40
+    gpu__time_duration.min                                                      ms                11.40
+    gpu__time_duration.sum                                                      ms                11.40
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst            390361.21
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst               423040
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst               384768
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst             51527680
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst            942700.61
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst              1020544
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst               927360
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst            124436480
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst           1357886.06
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst              1473024
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst              1340928
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst            179240960
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4704_26_ (128, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Kbyte                 6.28
+    dram__bytes.max                                                          Kbyte                 8.70
+    dram__bytes.min                                                          Kbyte                 3.07
+    dram__bytes.sum                                                          Kbyte               301.31
+    gpu__time_duration.avg                                                      us                35.07
+    gpu__time_duration.max                                                      us                35.07
+    gpu__time_duration.min                                                      us                35.07
+    gpu__time_duration.sum                                                      us                35.07
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst                    0
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst                    0
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst                    0
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst               496.48
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst                  512
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst                    0
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst                65536
+    nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4780_28_ (9600, 1, 1)x(128, 1, 1), Context 1, Stream 13, Device 0, CC 9.0
+    dram__bytes.avg                                                          Mbyte                47.20
+    dram__bytes.max                                                          Mbyte                48.49
+    dram__bytes.min                                                          Mbyte                24.04
+    dram__bytes.sum                                                          Gbyte                 2.27
+    gpu__time_duration.avg                                                      ms                30.77
+    gpu__time_duration.max                                                      ms                30.77
+    gpu__time_duration.min                                                      ms                30.77
+    gpu__time_duration.sum                                                      ms                30.77
+    sm__sass_thread_inst_executed_op_dadd_pred_on.avg                         inst           2119121.45
+    sm__sass_thread_inst_executed_op_dadd_pred_on.max                         inst              2277888
+    sm__sass_thread_inst_executed_op_dadd_pred_on.min                         inst              2093568
+    sm__sass_thread_inst_executed_op_dadd_pred_on.sum                         inst            279724032
+    sm__sass_thread_inst_executed_op_dfma_pred_on.avg                         inst            447456.97
+    sm__sass_thread_inst_executed_op_dfma_pred_on.max                         inst               489216
+    sm__sass_thread_inst_executed_op_dfma_pred_on.min                         inst               435456
+    sm__sass_thread_inst_executed_op_dfma_pred_on.sum                         inst             59064320
+    sm__sass_thread_inst_executed_op_dmul_pred_on.avg                         inst           1088418.91
+    sm__sass_thread_inst_executed_op_dmul_pred_on.max                         inst              1173888
+    sm__sass_thread_inst_executed_op_dmul_pred_on.min                         inst              1073664
+    sm__sass_thread_inst_executed_op_dmul_pred_on.sum                         inst            143671296
+  CSV: 16 lines -> s2l_roof14.csv
+
+===== (C) nsys: kernel time + transfer budget (1 step = 2 COBALT calls; /2 per-call) =====
+nsys rc=0
+##### kern_sum #####
+ Time (%)  Total Time (ns)  Instances   Avg (ns)    Med (ns)   Min (ns)  Max (ns)  StdDev (ns)                                   Name                                 
+ --------  ---------------  ---------  ----------  ----------  --------  --------  -----------  ----------------------------------------------------------------------
+     34.5        108740605          2  54370302.5  54370302.5  54367548  54373057       3895.5  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3776_8_ 
+     18.1         57175121          2  28587560.5  28587560.5  28572186  28602935      21742.8  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4278_22_
+     17.9         56252811          2  28126405.5  28126405.5  28123575  28129236       4002.9  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3858_10_
+     12.2         38358519          2  19179259.5  19179259.5  19170141  19188378      12895.5  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4780_28_
+      4.9         15347651          2   7673825.5   7673825.5   7651346   7696305      31790.8  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3640_4_ 
+      4.5         14219580          2   7109790.0   7109790.0   7098799   7120781      15543.6  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4593_24_
+      3.1          9922272          2   4961136.0   4961136.0   4951360   4970912      13825.4  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3510_2_ 
+      1.5          4804799          2   2402399.5   2402399.5   2393744   2411055      12240.7  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3893_14_
+      0.9          2970803          2   1485401.5   1485401.5   1485129   1485674        385.4  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3873_12_
+      0.6          2041581          2   1020790.5   1020790.5   1018439   1023142       3325.5  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3734_6_ 
+      0.6          2026286          2   1013143.0   1013143.0   1010951   1015335       3100.0  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3931_16_
+      0.6          1776907          2    888453.5    888453.5    887269    889638       1675.1  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3956_18_
+      0.4          1359337          2    679668.5    679668.5    678756    680581       1290.5  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L3978_20_
+      0.0            42304          2     21152.0     21152.0     21120     21184         45.3  nvkernel_generic_cobalt_generic_cobalt_update_from_source__F1L4704_26_
+##### mem_time_sum #####
+Processing [s2l_budget.sqlite] with [/apps/spack-2024-12/linux-rocky9-x86_64/gcc-11.4.1/nvhpc-24.11-q3al5tofrsh5c7bcspobulw4rlagljjc/Linux_x86_64/24.11/profilers/Nsight_Systems/host-linux-x64/reports/cuda_gpu_mem_time_sum.py]... 
+ ** CUDA GPU MemOps Summary (by Time) (cuda_gpu_mem_time_sum):
+ Time (%)  Total Time (ns)  Count  Avg (ns)   Med (ns)   Min (ns)  Max (ns)  StdDev (ns)           Operation          
+ --------  ---------------  -----  ---------  ---------  --------  --------  -----------  ----------------------------
+     72.7       1021599300    644  1586334.3  2071469.5      3040   2494160     758618.1  [CUDA memcpy Device-to-Host]
+     27.3        383872674   2582   148672.6      960.0       767   2641265     420718.6  [CUDA memcpy Host-to-Device]
+##### mem_size_sum #####
+ Total (MB)  Count  Avg (MB)  Med (MB)  Min (MB)  Max (MB)  StdDev (MB)           Operation          
+ ----------  -----  --------  --------  --------  --------  -----------  ----------------------------
+   6895.522    644    10.707    10.774     0.066    10.774        0.839  [CUDA memcpy Device-to-Host]
+   5668.945   2582     2.196     0.000     0.000    32.321        4.400  [CUDA memcpy Host-to-Device]
+##### cuda_api_sum #####
+ Time (%)  Total Time (ns)  Num Calls   Avg (ns)    Med (ns)   Min (ns)  Max (ns)  StdDev (ns)          Name        
+ --------  ---------------  ---------  ----------  ----------  --------  --------  -----------  --------------------
+     59.4       1158836593        644   1799435.7   2355380.5     13590   2829809     867408.4  cuMemcpyDtoHAsync_v2
+     21.7        423245684       2582    163921.6      3325.0      1960   2920208     462471.1  cuMemcpyHtoDAsync_v2
+     16.3        318557404        192   1659153.1      5130.0       540  54374089    7114749.3  cuStreamSynchronize 
+      0.8         14638466        180     81324.8     84040.5      1570    150701      29935.1  cuMemAlloc_v2       
+      0.1          1035567         28     36984.5     10040.5      3580    667374     123942.9  cuLaunchKernel      
+      0.0           952016          1    952016.0    952016.0    952016    952016          0.0  cuMemAllocHost_v2   
+      0.0            60980          1     60980.0     60980.0     60980     60980          0.0  cuMemAllocManaged   
+==== DONE Sun Jun 21 12:33:08 UTC 2026 ====
