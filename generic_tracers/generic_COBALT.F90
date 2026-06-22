@@ -3541,6 +3541,18 @@ contains
     !$omp target enter data map(alloc: bact(1)%temp_lim,bact(1)%jprod_n,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim, &
     !$omp&   bact(1)%juptake_ldon,bact(1)%juptake_ldop,bact(1)%jprod_nh4,bact(1)%jprod_po4, &
     !$omp&   bact(1)%jzloss_n,bact(1)%jzloss_p,bact(1)%jvirloss_n,bact(1)%jvirloss_p)
+    ! === GPU §3 BALLAST: extend the resident region over the ballast remin loops (section 4.x). Inputs produced
+    !     upstream on CPU (FMS_co2calc carbonate state omega/co3_ion; lith & det fields) -> map(to:). Arrays produced
+    !     fresh inside ballast (co3_sol_*, jremin_*, jdiss_*, scavenging feprime/ligand/etc.) -> map(alloc:), DtoH'd
+    !     at the (relocated) exit. jprod_* / jo2resp_wc / jno3denit_wc accumulators are ALREADY to:/from: (foodweb);
+    !     ballast augments them on-device (the += accumulator rule). ===
+    !$omp target enter data map(to: cobalt%omega_arag,cobalt%omega_calc,cobalt%f_co3_ion,cobalt%f_cadet_arag, &
+    !$omp&   cobalt%f_cadet_calc,cobalt%f_lith,cobalt%f_lithdet,cobalt%f_sldon,cobalt%f_srdon)
+    !$omp target enter data map(alloc: cobalt%co3_sol_arag,cobalt%co3_sol_calc,cobalt%expkreminT,cobalt%fe_sol, &
+    !$omp&   cobalt%feprime,cobalt%jdiss_cadet_arag,cobalt%jdiss_cadet_calc,cobalt%jdiss_sidet,cobalt%jfe_ads, &
+    !$omp&   cobalt%jprod_cadet_arag,cobalt%jprod_cadet_calc,cobalt%jprod_lithdet,cobalt%jremin_fedet, &
+    !$omp&   cobalt%jremin_ndet,cobalt%jremin_ndet_fast,cobalt%jremin_pdet,cobalt%jremin_pdet_fast, &
+    !$omp&   cobalt%kfe_eq_lig,cobalt%ligand)
     !$omp target teams loop collapse(3) private(n,k_po4_adjust)
     do k=1,nk ; do j=jsc,jec ; do i=isc,iec
        do n = 1,NUM_PHYTO    !{
@@ -4947,45 +4959,9 @@ contains
     !     juptake_*/no3lim/.../mu/f_mu_mem, cobalt irr_*/expkT/diatoms/f_irr_aclm relaxation), bacteria, zoo,
     !     losses, production, all accumulators; delete: only the true external inputs (prognostic f_*, grid). This
     !     is now the ONLY enter/exit for the entire foodweb region. f_nh3 already on host (island) -> delete. ===
-    !$omp target exit data map(from: cobalt%jprod_ndet,cobalt%jprod_pdet,cobalt%jprod_sldon,cobalt%jprod_ldon, &
-    !$omp&   cobalt%jprod_srdon,cobalt%jprod_sldop,cobalt%jprod_ldop,cobalt%jprod_srdop,cobalt%jprod_fedet, &
-    !$omp&   cobalt%jprod_sidet,cobalt%jprod_ndet_fast,cobalt%jprod_pdet_fast,cobalt%jprod_fed,cobalt%jprod_sio4, &
-    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jo2resp_wc,cobalt%jno3denit_wc,cobalt%hp_temp_lim, &
-    !$omp&   cobalt%hp_o2lim,cobalt%hp_jingest_n,cobalt%hp_jingest_p,cobalt%total_filter_feeding, &
-    !$omp&   cobalt%juptake_nh4amx,cobalt%juptake_no3amx,cobalt%jnamx,cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif, &
-    !$omp&   cobalt%daylength,cobalt%irr_inst,cobalt%irr_aclm_inst,cobalt%irr_mix,kblt,cobalt%f_irr_aclm_sfc, &
-    !$omp&   cobalt%f_irr_aclm_z,cobalt%f_irr_aclm,cobalt%f_chl,cobalt%expkT,cobalt%nlg_diatoms,cobalt%nmd_diatoms, &
-    !$omp&   cobalt%nlg_misc,cobalt%nmd_misc)
-    do m = 1,NUM_ZOO
-      !$omp target exit data map(from: zoo(m)%jprod_ndet,zoo(m)%jprod_pdet,zoo(m)%jprod_sldon,zoo(m)%jprod_ldon, &
-      !$omp&   zoo(m)%jprod_srdon,zoo(m)%jprod_sldop,zoo(m)%jprod_ldop,zoo(m)%jprod_srdop,zoo(m)%jprod_fedet, &
-      !$omp&   zoo(m)%jprod_sidet,zoo(m)%jprod_n,zoo(m)%jprod_nh4,zoo(m)%jprod_po4,zoo(m)%jprod_fed,zoo(m)%jprod_sio4, &
-      !$omp&   zoo(m)%temp_lim,zoo(m)%o2lim,zoo(m)%jingest_n,zoo(m)%jingest_p,zoo(m)%jingest_fe,zoo(m)%jingest_sio2, &
-      !$omp&   zoo(m)%jzloss_n,zoo(m)%jzloss_p,zoo(m)%jhploss_n,zoo(m)%jhploss_p)
-      !$omp target exit data map(delete: zoo(m)%f_n)
-    enddo
-    do n = 1,NUM_PHYTO
-      !$omp target exit data map(from: phyto(n)%stress_fac,phyto(n)%jaggloss_n,phyto(n)%jaggloss_p, &
-      !$omp&   phyto(n)%jaggloss_fe,phyto(n)%jaggloss_sio2,phyto(n)%jmortloss_n,phyto(n)%jmortloss_p, &
-      !$omp&   phyto(n)%jmortloss_fe,phyto(n)%jdissloss_si,phyto(n)%vmove,phyto(n)%jvirloss_n,phyto(n)%jvirloss_p, &
-      !$omp&   phyto(n)%jvirloss_fe,phyto(n)%jvirloss_sio2,phyto(n)%jexuloss_n,phyto(n)%jexuloss_p,phyto(n)%jexuloss_fe, &
-      !$omp&   phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2, &
-      !$omp&   phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%q_si_2_n,phyto(n)%uptake_p_2_n,phyto(n)%no3lim, &
-      !$omp&   phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim,phyto(n)%felim,phyto(n)%def_fe, &
-      !$omp&   phyto(n)%liebig_lim,phyto(n)%pcmlim_aclm_inst,phyto(n)%f_pcmlim_aclm,phyto(n)%irrlim,phyto(n)%theta, &
-      !$omp&   phyto(n)%bresp,phyto(n)%mu,phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n, &
-      !$omp&   phyto(n)%mu_mix,phyto(n)%f_mu_mem,phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
-      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4)
-      !$omp target exit data map(delete: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
-    enddo
-    !$omp target exit data map(from: bact(1)%jvirloss_n,bact(1)%jvirloss_p,bact(1)%jzloss_n,bact(1)%jzloss_p, &
-    !$omp&   bact(1)%temp_lim,bact(1)%jprod_n,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim,bact(1)%juptake_ldon, &
-    !$omp&   bact(1)%juptake_ldop,bact(1)%jprod_nh4,bact(1)%jprod_po4)
-    !$omp target exit data map(delete: bact(1)%f_n,cobalt%f_o2,cobalt%f_no3,cobalt%f_nh4,cobalt%f_nh3, &
-    !$omp&   cobalt%f_ldon,cobalt%f_ldop,cobalt%f_po4,cobalt%f_sio4,cobalt%f_fed,cobalt%f_silg,cobalt%f_simd, &
-    !$omp&   cobalt%mld_aclm,cobalt%hp_jingest_fe,cobalt%hp_jingest_sio2,cobalt%f_ndet,cobalt%f_ndet_fast, &
-    !$omp&   cobalt%f_pdet,cobalt%f_pdet_fast,cobalt%f_fedet,cobalt%f_sidet,cobalt%zt,hblt_depth,Temp,geolat, &
-    !$omp&   zmid,Salt,dzt,grid_tmask,sw_pen_band,opacity_band,max_wavelength_band,cobalt,zoo,phyto,bact)
+    ! === GPU §3: the foodweb exit-data is RELOCATED to after the ballast loops (region now stays resident through
+    !     ballast — ballast reads f_*det/jprod_*/omega/etc. that the old exit deleted here). See the relocated +
+    !     ballast-augmented exit just before mpp_clock_end(id_clock_ballast_loops). ===
     call mpp_clock_end(id_clock_production_loop)
 
     call mpp_clock_begin(id_clock_ballast_loops)
@@ -4997,6 +4973,7 @@ contains
     ! 4.1: Determine the aragonite and calcite saturation states and the production of calcite and aragonite detritus
     !
     ! Calculate the aragonite and calcite saturation states
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
       cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(cobalt%omega_arag(i,j,k),epsln)
       cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(cobalt%omega_calc(i,j,k),epsln)
@@ -5007,6 +4984,7 @@ contains
     ! respect to calcite and aragonite and rates associated with the production of detritus from organisms that form
     ! calcite or aragonite shells.  The overall scalings are controlled by the parameters ca_2_n_arag and ca_2_n_calc.
     ! The saturation state dependence is capped with the parameter caco3_sat_max.
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
         ! Pteropods are assumed to be the primary aragonite shell formers.  Pteropods fall into the medium and large
         ! zooplankton groups within COBALT.  Production of aragonite detritus is thus linked to the consumption of
@@ -5075,6 +5053,7 @@ contains
     ! constant is phi_lith.  Large phytoplankton and diazotrophs are assumed to be solely consumed by filter feeding
     ! copepods.  The proportion of medium and small phytoplankton subject to filter feeding is assumed proportional to
     ! the relative prey availability of small and medium phytoplankton to copepods versus small zooplankton.
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        cobalt%jprod_lithdet(i,j,k)=( cobalt%total_filter_feeding(i,j,k)/ &
                                    ( phyto(LARGE)%f_n(i,j,k) + phyto(DIAZO)%f_n(i,j,k) + &
@@ -5092,6 +5071,7 @@ contains
     !
     ! Note: Dissolution of aragonite and calcite detritus has been observed under supersaturating conditions. This
     ! process will be added in a future COBALT update.
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        cobalt%jdiss_cadet_arag(i,j,k) = cobalt%gamma_cadet_arag * &
          max(0.0, 1.0 - cobalt%omega_arag(i,j,k)) * cobalt%f_cadet_arag(i,j,k)
@@ -5138,6 +5118,7 @@ contains
     ! Klaas and Archer, 2002: https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2001GB001765
     ! Dunne et al., 2005: https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2004GB002390
     !
+    !$omp target teams loop collapse(3)
     do k=1,nk ; do j=jsc,jec ; do i=isc,iec  !{
        cobalt%expkreminT(i,j,k) = exp(cobalt%kappa_remin * Temp(i,j,k))
        ! Calculate remineralization under aerobic remineralization
@@ -5199,6 +5180,7 @@ contains
     !
     ! This routine applies a fixed ratio between POC remineralization and additional CaCO3 dissolution
     if (cobalt%do_resp_ca_diss) then
+        !$omp target teams loop collapse(3)
         do k=1,nk ; do j=jsc,jec ; do i=isc,iec  !{
            cobalt%jdiss_cadet_arag(i,j,k) = cobalt%jdiss_cadet_arag(i,j,k) + &
                                             cobalt%resp_ca_2_n_arag * cobalt%f_cadet_arag(i,j,k) * &
@@ -5236,6 +5218,7 @@ contains
     ! Fan et al. (2008): https://www.sciencedirect.com/science/article/pii/S030442030800008X
     ! Liu and Millero (2002): https://www.sciencedirect.com/science/article/pii/S030442030800008X
     !
+    !$omp target teams loop collapse(3) private(feprime_temp, fe_salt)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        ! Calculate the equilibrium ligand binding strength and a function of light
        cobalt%kfe_eq_lig(i,j,k) = min(cobalt%kfe_eq_lig_ll, 10.0**( log10(cobalt%kfe_eq_lig_hl) + &
@@ -5313,6 +5296,10 @@ contains
     ! Grid scale noise in these layers can occur, particularly for quantities with large bottom fluxes.  COBALT thus
     ! uses conditions over a specified bottom layer thickness (cobalt%bottom_thickness, default = 1m) for bottom calcs.
 
+    ! GPU §3 bridge: the bottom-sediment block below is a CPU island, but reads cobalt%co3_sol_calc which was just
+    ! produced ON DEVICE by the saturation-state kernel (sec 4.1). Refresh the host copy before the CPU reads it.
+    ! (f_co3_ion is map(to:)/unmodified on device, so its host copy is already valid -> only co3_sol_calc needs this.)
+    !$omp target update from(cobalt%co3_sol_calc)
     ! Local variables used to determine the layers falling within the bottom thickness
     allocate(rho_dzt_bot(isc:iec,jsc:jec))
     allocate(k_bot(isc:iec,jsc:jec))
@@ -5614,6 +5601,56 @@ contains
        cobalt%f_cased(i,j,k) = 0.0
     enddo; enddo ; enddo  !} i,j,k
 
+    ! === GPU §3 BALLAST exit (relocated from after the foodweb): one exit now closes the whole foodweb+ballast
+    !     resident region. (1) DtoH ballast-produced tendencies consumed by CPU source/sink + diagnostics; (2) delete
+    !     the ballast-only map(to:) inputs; (3) the original foodweb from:/delete groups, ending with the whole-type
+    !     cobalt/zoo/phyto/bact delete LAST so individual-member ops precede it. ===
+    !$omp target exit data map(from: cobalt%co3_sol_arag,cobalt%co3_sol_calc,cobalt%expkreminT,cobalt%fe_sol, &
+    !$omp&   cobalt%feprime,cobalt%jdiss_cadet_arag,cobalt%jdiss_cadet_calc,cobalt%jdiss_sidet,cobalt%jfe_ads, &
+    !$omp&   cobalt%jprod_cadet_arag,cobalt%jprod_cadet_calc,cobalt%jprod_lithdet,cobalt%jremin_fedet, &
+    !$omp&   cobalt%jremin_ndet,cobalt%jremin_ndet_fast,cobalt%jremin_pdet,cobalt%jremin_pdet_fast, &
+    !$omp&   cobalt%kfe_eq_lig,cobalt%ligand)
+    !$omp target exit data map(delete: cobalt%omega_arag,cobalt%omega_calc,cobalt%f_co3_ion,cobalt%f_cadet_arag, &
+    !$omp&   cobalt%f_cadet_calc,cobalt%f_lith,cobalt%f_lithdet,cobalt%f_sldon,cobalt%f_srdon)
+    !$omp target exit data map(from: cobalt%jprod_ndet,cobalt%jprod_pdet,cobalt%jprod_sldon,cobalt%jprod_ldon, &
+    !$omp&   cobalt%jprod_srdon,cobalt%jprod_sldop,cobalt%jprod_ldop,cobalt%jprod_srdop,cobalt%jprod_fedet, &
+    !$omp&   cobalt%jprod_sidet,cobalt%jprod_ndet_fast,cobalt%jprod_pdet_fast,cobalt%jprod_fed,cobalt%jprod_sio4, &
+    !$omp&   cobalt%jprod_nh4,cobalt%jprod_po4,cobalt%jo2resp_wc,cobalt%jno3denit_wc,cobalt%hp_temp_lim, &
+    !$omp&   cobalt%hp_o2lim,cobalt%hp_jingest_n,cobalt%hp_jingest_p,cobalt%total_filter_feeding, &
+    !$omp&   cobalt%juptake_nh4amx,cobalt%juptake_no3amx,cobalt%jnamx,cobalt%juptake_nh4nitrif,cobalt%jprod_no3nitrif, &
+    !$omp&   cobalt%daylength,cobalt%irr_inst,cobalt%irr_aclm_inst,cobalt%irr_mix,kblt,cobalt%f_irr_aclm_sfc, &
+    !$omp&   cobalt%f_irr_aclm_z,cobalt%f_irr_aclm,cobalt%f_chl,cobalt%expkT,cobalt%nlg_diatoms,cobalt%nmd_diatoms, &
+    !$omp&   cobalt%nlg_misc,cobalt%nmd_misc)
+    do m = 1,NUM_ZOO
+      !$omp target exit data map(from: zoo(m)%jprod_ndet,zoo(m)%jprod_pdet,zoo(m)%jprod_sldon,zoo(m)%jprod_ldon, &
+      !$omp&   zoo(m)%jprod_srdon,zoo(m)%jprod_sldop,zoo(m)%jprod_ldop,zoo(m)%jprod_srdop,zoo(m)%jprod_fedet, &
+      !$omp&   zoo(m)%jprod_sidet,zoo(m)%jprod_n,zoo(m)%jprod_nh4,zoo(m)%jprod_po4,zoo(m)%jprod_fed,zoo(m)%jprod_sio4, &
+      !$omp&   zoo(m)%temp_lim,zoo(m)%o2lim,zoo(m)%jingest_n,zoo(m)%jingest_p,zoo(m)%jingest_fe,zoo(m)%jingest_sio2, &
+      !$omp&   zoo(m)%jzloss_n,zoo(m)%jzloss_p,zoo(m)%jhploss_n,zoo(m)%jhploss_p)
+      !$omp target exit data map(delete: zoo(m)%f_n)
+    enddo
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(from: phyto(n)%stress_fac,phyto(n)%jaggloss_n,phyto(n)%jaggloss_p, &
+      !$omp&   phyto(n)%jaggloss_fe,phyto(n)%jaggloss_sio2,phyto(n)%jmortloss_n,phyto(n)%jmortloss_p, &
+      !$omp&   phyto(n)%jmortloss_fe,phyto(n)%jdissloss_si,phyto(n)%vmove,phyto(n)%jvirloss_n,phyto(n)%jvirloss_p, &
+      !$omp&   phyto(n)%jvirloss_fe,phyto(n)%jvirloss_sio2,phyto(n)%jexuloss_n,phyto(n)%jexuloss_p,phyto(n)%jexuloss_fe, &
+      !$omp&   phyto(n)%jzloss_n,phyto(n)%jzloss_p,phyto(n)%jzloss_fe,phyto(n)%jzloss_sio2, &
+      !$omp&   phyto(n)%q_fe_2_n,phyto(n)%q_p_2_n,phyto(n)%q_si_2_n,phyto(n)%uptake_p_2_n,phyto(n)%no3lim, &
+      !$omp&   phyto(n)%nh4lim,phyto(n)%o2lim,phyto(n)%silim,phyto(n)%po4lim,phyto(n)%felim,phyto(n)%def_fe, &
+      !$omp&   phyto(n)%liebig_lim,phyto(n)%pcmlim_aclm_inst,phyto(n)%f_pcmlim_aclm,phyto(n)%irrlim,phyto(n)%theta, &
+      !$omp&   phyto(n)%bresp,phyto(n)%mu,phyto(n)%P_C_max,phyto(n)%alpha,phyto(n)%chl,phyto(n)%jprod_n, &
+      !$omp&   phyto(n)%mu_mix,phyto(n)%f_mu_mem,phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3, &
+      !$omp&   phyto(n)%juptake_po4,phyto(n)%juptake_fe,phyto(n)%juptake_sio4)
+      !$omp target exit data map(delete: phyto(n)%f_fe,phyto(n)%f_n,phyto(n)%f_p)
+    enddo
+    !$omp target exit data map(from: bact(1)%jvirloss_n,bact(1)%jvirloss_p,bact(1)%jzloss_n,bact(1)%jzloss_p, &
+    !$omp&   bact(1)%temp_lim,bact(1)%jprod_n,bact(1)%ldonlim,bact(1)%o2lim,bact(1)%no3lim,bact(1)%juptake_ldon, &
+    !$omp&   bact(1)%juptake_ldop,bact(1)%jprod_nh4,bact(1)%jprod_po4)
+    !$omp target exit data map(delete: bact(1)%f_n,cobalt%f_o2,cobalt%f_no3,cobalt%f_nh4,cobalt%f_nh3, &
+    !$omp&   cobalt%f_ldon,cobalt%f_ldop,cobalt%f_po4,cobalt%f_sio4,cobalt%f_fed,cobalt%f_silg,cobalt%f_simd, &
+    !$omp&   cobalt%mld_aclm,cobalt%hp_jingest_fe,cobalt%hp_jingest_sio2,cobalt%f_ndet,cobalt%f_ndet_fast, &
+    !$omp&   cobalt%f_pdet,cobalt%f_pdet_fast,cobalt%f_fedet,cobalt%f_sidet,cobalt%zt,hblt_depth,Temp,geolat, &
+    !$omp&   zmid,Salt,dzt,grid_tmask,sw_pen_band,opacity_band,max_wavelength_band,cobalt,zoo,phyto,bact)
     call mpp_clock_end(id_clock_ballast_loops)
 
     call g_tracer_set_values(tracer_list,'alk',  'btf', cobalt%b_alk ,isd,jsd)
@@ -5749,43 +5786,50 @@ contains
     !     Phytoplankton Nitrogen and Phosphorus
     !
     call mpp_clock_begin(id_clock_source_sink_loop2)
+    ! === GPU §3 STAGE-3 POINTER EXPERIMENT: loop2 FUSED compute+apply on GPU. Tests whether nvfortran 24.11 maps the
+    !     g_tracer registry pointers cobalt%p_X (associated at loop1) to device (map to:) and writes p_X(i,j,k,tau)
+    !     back (map from:), so the tracer update runs on GPU — removing the CPU-apply floor. A/B vs the proven split
+    !     (loop2 was 1.70s split). If 17-tracer b2b PASS + faster -> pointers win; if FAIL/garbage -> revert to split. ===
+    !$omp target enter data map(to: cobalt, phyto)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%mu,phyto(n)%f_n,phyto(n)%f_p,phyto(n)%jzloss_n,phyto(n)%jhploss_n, &
+      !$omp&   phyto(n)%jaggloss_n,phyto(n)%jvirloss_n,phyto(n)%jexuloss_n,phyto(n)%jmortloss_n,phyto(n)%jzloss_p, &
+      !$omp&   phyto(n)%jhploss_p,phyto(n)%jaggloss_p,phyto(n)%jvirloss_p,phyto(n)%jexuloss_p,phyto(n)%jmortloss_p, &
+      !$omp&   phyto(n)%juptake_po4)
+    enddo
+    !$omp target enter data map(alloc: cobalt%jndi,cobalt%jnlg,cobalt%jnmd,cobalt%jnsm,cobalt%jpdi,cobalt%jplg, &
+    !$omp&   cobalt%jpmd,cobalt%jpsm)
+    ! map the registry-field pointers to: (bring current tracer field) — the kernel will RMW them and from: writes back
+    !$omp target enter data map(to: cobalt%p_ndi,cobalt%p_nlg,cobalt%p_nmd,cobalt%p_nsm,cobalt%p_pdi,cobalt%p_plg, &
+    !$omp&   cobalt%p_pmd,cobalt%p_psm)
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
        ! Diazotrophic Phytoplankton Nitrogen
-       !
        cobalt%jndi(i,j,k) = phyto(DIAZO)%mu(i,j,k)*phyto(DIAZO)%f_n(i,j,k) - &
                             phyto(DIAZO)%jzloss_n(i,j,k) -       &
                             phyto(DIAZO)%jhploss_n(i,j,k) - phyto(DIAZO)%jaggloss_n(i,j,k) -       &
                             phyto(DIAZO)%jvirloss_n(i,j,k) - phyto(DIAZO)%jexuloss_n(i,j,k) -      &
                             phyto(DIAZO)%jmortloss_n(i,j,k)
        cobalt%p_ndi(i,j,k,tau) = cobalt%p_ndi(i,j,k,tau) + cobalt%jndi(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Large Phytoplankton Nitrogen
-       !
        cobalt%jnlg(i,j,k) = phyto(LARGE)%mu(i,j,k)*phyto(LARGE)%f_n(i,j,k) -    &
                             phyto(LARGE)%jzloss_n(i,j,k) - phyto(LARGE)%jhploss_n(i,j,k) -         &
                             phyto(LARGE)%jaggloss_n(i,j,k) - phyto(LARGE)%jvirloss_n(i,j,k) -      &
                             phyto(LARGE)%jexuloss_n(i,j,k) - phyto(LARGE)%jmortloss_n(i,j,k)
        cobalt%p_nlg(i,j,k,tau) = cobalt%p_nlg(i,j,k,tau) + cobalt%jnlg(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Medium Phytoplankton Nitrogen
-       !
        cobalt%jnmd(i,j,k) = phyto(MEDIUM)%mu(i,j,k)*phyto(MEDIUM)%f_n(i,j,k) -    &
                             phyto(MEDIUM)%jzloss_n(i,j,k) - phyto(MEDIUM)%jhploss_n(i,j,k) -         &
                             phyto(MEDIUM)%jaggloss_n(i,j,k) - phyto(MEDIUM)%jvirloss_n(i,j,k) -      &
                             phyto(MEDIUM)%jexuloss_n(i,j,k) - phyto(MEDIUM)%jmortloss_n(i,j,k)
        cobalt%p_nmd(i,j,k,tau) = cobalt%p_nmd(i,j,k,tau) + cobalt%jnmd(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Small Phytoplankton Nitrogen
-       !
        cobalt%jnsm(i,j,k) = phyto(SMALL)%mu(i,j,k)*phyto(SMALL)%f_n(i,j,k) -    &
                             phyto(SMALL)%jzloss_n(i,j,k) - phyto(SMALL)%jhploss_n(i,j,k) -         &
                             phyto(SMALL)%jaggloss_n(i,j,k) - phyto(SMALL)%jvirloss_n(i,j,k) -      &
                             phyto(SMALL)%jexuloss_n(i,j,k) - phyto(SMALL)%jmortloss_n(i,j,k)
        cobalt%p_nsm(i,j,k,tau) = cobalt%p_nsm(i,j,k,tau) + cobalt%jnsm(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Diazotrophic Phytoplankton Phosphorus
-       !
        cobalt%jpdi(i,j,k) = phyto(DIAZO)%juptake_po4(i,j,k) + &
                             min(phyto(DIAZO)%mu(i,j,k),0.0)*phyto(DIAZO)%f_p(i,j,k) - &
                             phyto(DIAZO)%jzloss_p(i,j,k) -  &
@@ -5793,27 +5837,21 @@ contains
                             phyto(DIAZO)%jvirloss_p(i,j,k) - phyto(DIAZO)%jexuloss_p(i,j,k) -      &
                             phyto(DIAZO)%jmortloss_p(i,j,k)
        cobalt%p_pdi(i,j,k,tau) = cobalt%p_pdi(i,j,k,tau) + cobalt%jpdi(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Large Phytoplankton Phosphorus
-       !
        cobalt%jplg(i,j,k) = phyto(LARGE)%juptake_po4(i,j,k) + &
                             min(phyto(LARGE)%mu(i,j,k),0.0)*phyto(LARGE)%f_p(i,j,k) - &
                             phyto(LARGE)%jzloss_p(i,j,k) - phyto(LARGE)%jhploss_p(i,j,k) -         &
                             phyto(LARGE)%jaggloss_p(i,j,k) - phyto(LARGE)%jvirloss_p(i,j,k) -      &
                             phyto(LARGE)%jexuloss_p(i,j,k) - phyto(LARGE)%jmortloss_p(i,j,k)
        cobalt%p_plg(i,j,k,tau) = cobalt%p_plg(i,j,k,tau) + cobalt%jplg(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Medium Phytoplankton Phosphorus
-       !
        cobalt%jpmd(i,j,k) = phyto(MEDIUM)%juptake_po4(i,j,k) + &
                             min(phyto(MEDIUM)%mu(i,j,k),0.0)*phyto(MEDIUM)%f_p(i,j,k) - &
                             phyto(MEDIUM)%jzloss_p(i,j,k) - phyto(MEDIUM)%jhploss_p(i,j,k) -         &
                             phyto(MEDIUM)%jaggloss_p(i,j,k) - phyto(MEDIUM)%jvirloss_p(i,j,k) -      &
                             phyto(MEDIUM)%jexuloss_p(i,j,k) - phyto(MEDIUM)%jmortloss_p(i,j,k)
        cobalt%p_pmd(i,j,k,tau) = cobalt%p_pmd(i,j,k,tau) + cobalt%jpmd(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Small Phytoplankton Phosphorus
-       !
        cobalt%jpsm(i,j,k) = phyto(SMALL)%juptake_po4(i,j,k) + &
                             min(phyto(SMALL)%mu(i,j,k),0.0)*phyto(SMALL)%f_p(i,j,k) - &
                             phyto(SMALL)%jzloss_p(i,j,k) - phyto(SMALL)%jhploss_p(i,j,k) -         &
@@ -5821,73 +5859,97 @@ contains
                             phyto(SMALL)%jexuloss_p(i,j,k) - phyto(SMALL)%jmortloss_p(i,j,k)
        cobalt%p_psm(i,j,k,tau) = cobalt%p_psm(i,j,k,tau) + cobalt%jpsm(i,j,k)*dt*grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
+    !$omp target exit data map(from: cobalt%jndi,cobalt%jnlg,cobalt%jnmd,cobalt%jnsm,cobalt%jpdi,cobalt%jplg, &
+    !$omp&   cobalt%jpmd,cobalt%jpsm)
+    ! write the updated registry fields back to host
+    !$omp target exit data map(from: cobalt%p_ndi,cobalt%p_nlg,cobalt%p_nmd,cobalt%p_nsm,cobalt%p_pdi,cobalt%p_plg, &
+    !$omp&   cobalt%p_pmd,cobalt%p_psm)
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(delete: phyto(n)%mu,phyto(n)%f_n,phyto(n)%f_p,phyto(n)%jzloss_n,phyto(n)%jhploss_n, &
+      !$omp&   phyto(n)%jaggloss_n,phyto(n)%jvirloss_n,phyto(n)%jexuloss_n,phyto(n)%jmortloss_n,phyto(n)%jzloss_p, &
+      !$omp&   phyto(n)%jhploss_p,phyto(n)%jaggloss_p,phyto(n)%jvirloss_p,phyto(n)%jexuloss_p,phyto(n)%jmortloss_p, &
+      !$omp&   phyto(n)%juptake_po4)
+    enddo
+    !$omp target exit data map(delete: cobalt, phyto)
 !
     call mpp_clock_end(id_clock_source_sink_loop2)
     !
     !     Phytoplankton Silicon and Iron
     !
     call mpp_clock_begin(id_clock_source_sink_loop3)
+    ! === GPU §3 source/sink loop3 (phyto Si/Fe + bacteria N): compute/apply split, own resident scope. ===
+    !$omp target enter data map(to: cobalt, phyto, bact)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%juptake_sio4,phyto(n)%jzloss_sio2,phyto(n)%jhploss_sio2, &
+      !$omp&   phyto(n)%jaggloss_sio2,phyto(n)%jvirloss_sio2,phyto(n)%jdissloss_si,phyto(n)%juptake_fe, &
+      !$omp&   phyto(n)%jzloss_fe,phyto(n)%jhploss_fe,phyto(n)%jaggloss_fe,phyto(n)%jvirloss_fe, &
+      !$omp&   phyto(n)%jexuloss_fe,phyto(n)%jmortloss_fe)
+    enddo
+    !$omp target enter data map(to: bact(1)%jprod_n,bact(1)%jzloss_n,bact(1)%jvirloss_n,bact(1)%jhploss_n)
+    !$omp target enter data map(alloc: cobalt%jsilg,cobalt%jsimd,cobalt%jfedi,cobalt%jfelg,cobalt%jfemd, &
+    !$omp&   cobalt%jfesm,cobalt%jnbact)
+    !$omp target enter data map(to: cobalt%p_silg,cobalt%p_simd,cobalt%p_fedi,cobalt%p_felg,cobalt%p_femd, &
+    !$omp&   cobalt%p_fesm,cobalt%p_nbact)
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
        ! Large Phytoplankton Silicon
-       !
        cobalt%jsilg(i,j,k) = phyto(LARGE)%juptake_sio4(i,j,k) - &
                              phyto(LARGE)%jzloss_sio2(i,j,k) - phyto(LARGE)%jhploss_sio2(i,j,k) - &
                              phyto(LARGE)%jaggloss_sio2(i,j,k) - phyto(LARGE)%jvirloss_sio2(i,j,k) - &
                              phyto(LARGE)%jdissloss_si(i,j,k)
-       cobalt%p_silg(i,j,k,tau) = cobalt%p_silg(i,j,k,tau) + cobalt%jsilg(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Medium Phytoplankton Silicon
-       !
        cobalt%jsimd(i,j,k) = phyto(MEDIUM)%juptake_sio4(i,j,k) - &
                              phyto(MEDIUM)%jzloss_sio2(i,j,k) - phyto(MEDIUM)%jhploss_sio2(i,j,k) - &
                              phyto(MEDIUM)%jaggloss_sio2(i,j,k) - phyto(MEDIUM)%jvirloss_sio2(i,j,k) - &
                              phyto(MEDIUM)%jdissloss_si(i,j,k)
-       cobalt%p_simd(i,j,k,tau) = cobalt%p_simd(i,j,k,tau) + cobalt%jsimd(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Diazotrophic Phytoplankton Iron
-       !
        cobalt%jfedi(i,j,k) = phyto(DIAZO)%juptake_fe(i,j,k) - &
                              phyto(DIAZO)%jzloss_fe(i,j,k) - &
                              phyto(DIAZO)%jhploss_fe(i,j,k) - phyto(DIAZO)%jaggloss_fe(i,j,k) - &
                              phyto(DIAZO)%jvirloss_fe(i,j,k) - phyto(DIAZO)%jexuloss_fe(i,j,k) - &
                              phyto(DIAZO)%jmortloss_fe(i,j,k)
-       cobalt%p_fedi(i,j,k,tau) = cobalt%p_fedi(i,j,k,tau) + cobalt%jfedi(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Large Phytoplankton Iron
-       !
        cobalt%jfelg(i,j,k) = phyto(LARGE)%juptake_fe(i,j,k) - &
                              phyto(LARGE)%jzloss_fe(i,j,k) - &
                              phyto(LARGE)%jhploss_fe(i,j,k) - phyto(LARGE)%jaggloss_fe(i,j,k) - &
                              phyto(LARGE)%jvirloss_fe(i,j,k) - phyto(LARGE)%jexuloss_fe(i,j,k) - &
                              phyto(LARGE)%jmortloss_fe(i,j,k)
-       cobalt%p_felg(i,j,k,tau) = cobalt%p_felg(i,j,k,tau) + cobalt%jfelg(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Medium Phytoplankton Iron
-       !
        cobalt%jfemd(i,j,k) = phyto(MEDIUM)%juptake_fe(i,j,k) - &
                              phyto(MEDIUM)%jzloss_fe(i,j,k) - &
                              phyto(MEDIUM)%jhploss_fe(i,j,k) - phyto(MEDIUM)%jaggloss_fe(i,j,k) - &
                              phyto(MEDIUM)%jvirloss_fe(i,j,k) - phyto(MEDIUM)%jexuloss_fe(i,j,k) - &
                              phyto(MEDIUM)%jmortloss_fe(i,j,k)
-       cobalt%p_femd(i,j,k,tau) = cobalt%p_femd(i,j,k,tau) + cobalt%jfemd(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Small Phytoplankton Iron
-       !
        cobalt%jfesm(i,j,k) = phyto(SMALL)%juptake_fe(i,j,k) - &
                                 phyto(SMALL)%jzloss_fe(i,j,k) - &
                                 phyto(SMALL)%jhploss_fe(i,j,k) - phyto(SMALL)%jaggloss_fe(i,j,k) - &
                                 phyto(SMALL)%jvirloss_fe(i,j,k) - phyto(SMALL)%jexuloss_fe(i,j,k) - &
                                 phyto(SMALL)%jmortloss_fe(i,j,k)
-       cobalt%p_fesm(i,j,k,tau) = cobalt%p_fesm(i,j,k,tau) + cobalt%jfesm(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Bacteria
-       !
        cobalt%jnbact(i,j,k) = bact(1)%jprod_n(i,j,k) - bact(1)%jzloss_n(i,j,k) - &
                               bact(1)%jvirloss_n(i,j,k) - bact(1)%jhploss_n(i,j,k)
+       ! apply (fused on GPU via p_* pointer mapping)
+       cobalt%p_silg(i,j,k,tau) = cobalt%p_silg(i,j,k,tau) + cobalt%jsilg(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_simd(i,j,k,tau) = cobalt%p_simd(i,j,k,tau) + cobalt%jsimd(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_fedi(i,j,k,tau) = cobalt%p_fedi(i,j,k,tau) + cobalt%jfedi(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_felg(i,j,k,tau) = cobalt%p_felg(i,j,k,tau) + cobalt%jfelg(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_femd(i,j,k,tau) = cobalt%p_femd(i,j,k,tau) + cobalt%jfemd(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_fesm(i,j,k,tau) = cobalt%p_fesm(i,j,k,tau) + cobalt%jfesm(i,j,k)*dt*grid_tmask(i,j,k)
        cobalt%p_nbact(i,j,k,tau) = cobalt%p_nbact(i,j,k,tau) + cobalt%jnbact(i,j,k)*dt*grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
-
+    !$omp target exit data map(from: cobalt%jsilg,cobalt%jsimd,cobalt%jfedi,cobalt%jfelg,cobalt%jfemd, &
+    !$omp&   cobalt%jfesm,cobalt%jnbact)
+    !$omp target exit data map(from: cobalt%p_silg,cobalt%p_simd,cobalt%p_fedi,cobalt%p_felg,cobalt%p_femd, &
+    !$omp&   cobalt%p_fesm,cobalt%p_nbact)
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(delete: phyto(n)%juptake_sio4,phyto(n)%jzloss_sio2,phyto(n)%jhploss_sio2, &
+      !$omp&   phyto(n)%jaggloss_sio2,phyto(n)%jvirloss_sio2,phyto(n)%jdissloss_si,phyto(n)%juptake_fe, &
+      !$omp&   phyto(n)%jzloss_fe,phyto(n)%jhploss_fe,phyto(n)%jaggloss_fe,phyto(n)%jvirloss_fe, &
+      !$omp&   phyto(n)%jexuloss_fe,phyto(n)%jmortloss_fe)
+    enddo
+    !$omp target exit data map(delete: bact(1)%jprod_n,bact(1)%jzloss_n,bact(1)%jvirloss_n,bact(1)%jhploss_n)
+    !$omp target exit data map(delete: cobalt, phyto, bact)
     call mpp_clock_end(id_clock_source_sink_loop3)
     !
     !    Zooplankton
@@ -5919,57 +5981,68 @@ contains
     !     NO3
     !
     call mpp_clock_begin(id_clock_source_sink_loop5)
+    ! === GPU §3 source/sink loop5 (no3/nh4/po4/sio4/fed): compute/apply split, own resident scope. The 3 original
+    !     do-blocks fuse into one compute kernel (independent per cell); iceberg terms stay in the host apply. ===
+    !$omp target enter data map(to: cobalt, phyto)
+    !$omp target enter data map(to: cobalt%jprod_no3nitrif,cobalt%jno3denit_wc,cobalt%juptake_no3amx,cobalt%jprod_nh4, &
+    !$omp&   cobalt%juptake_nh4nitrif,cobalt%juptake_nh4amx,cobalt%jprod_po4,cobalt%jprod_sio4,cobalt%jprod_fed, &
+    !$omp&   cobalt%jfe_coast,cobalt%jfe_iceberg,cobalt%jfe_ads,dzt)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%juptake_no3,phyto(n)%juptake_nh4,phyto(n)%juptake_po4, &
+      !$omp&   phyto(n)%juptake_sio4,phyto(n)%juptake_fe)
+    enddo
+    !$omp target enter data map(alloc: cobalt%jno3,cobalt%jno3h,cobalt%jnh4,cobalt%jnh4h,cobalt%jpo4,cobalt%jpo4h, &
+    !$omp&   cobalt%jsio4,cobalt%jsio4h,cobalt%jfed)
+    !$omp target enter data map(to: cobalt%p_no3,cobalt%p_nh4,cobalt%p_po4,cobalt%p_sio4,cobalt%p_fed, &
+    !$omp&   cobalt%jno3_iceberg,cobalt%jpo4_iceberg)
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+       ! NO3
        cobalt%jno3(i,j,k) =  cobalt%jprod_no3nitrif(i,j,k) - phyto(DIAZO)%juptake_no3(i,j,k) - &
                              phyto(LARGE)%juptake_no3(i,j,k) - phyto(MEDIUM)%juptake_no3(i,j,k) - &
                              phyto(SMALL)%juptake_no3(i,j,k) - &
                              cobalt%jno3denit_wc(i,j,k) - cobalt%juptake_no3amx(i,j,k)
        cobalt%jno3h(i,j,k) = cobalt%jno3(i,j,k) * dzt(i,j,k)
-       cobalt%p_no3(i,j,k,tau) = cobalt%p_no3(i,j,k,tau) + &
-               (cobalt%jno3(i,j,k)+cobalt%jno3_iceberg(i,j,k))*dt*grid_tmask(i,j,k)
-    enddo; enddo ; enddo  !} i,j,k
-    !
-    !     Other nutrients
-    !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
        ! NH4
-       !
        cobalt%jnh4(i,j,k) = cobalt%jprod_nh4(i,j,k) - phyto(DIAZO)%juptake_nh4(i,j,k) - &
                             phyto(LARGE)%juptake_nh4(i,j,k) - phyto(MEDIUM)%juptake_nh4(i,j,k) - &
                             phyto(SMALL)%juptake_nh4(i,j,k) - &
                             cobalt%juptake_nh4nitrif(i,j,k) - cobalt%juptake_nh4amx(i,j,k)
        cobalt%jnh4h(i,j,k) = cobalt%jnh4(i,j,k) * dzt(i,j,k)
-       cobalt%p_nh4(i,j,k,tau) = cobalt%p_nh4(i,j,k,tau) + cobalt%jnh4(i,j,k) * dt * grid_tmask(i,j,k)
-       !
        ! PO4
-       !
        cobalt%jpo4(i,j,k) = cobalt%jprod_po4(i,j,k) - phyto(DIAZO)%juptake_po4(i,j,k) - &
                             phyto(LARGE)%juptake_po4(i,j,k) - phyto(MEDIUM)%juptake_po4(i,j,k) - &
                             phyto(SMALL)%juptake_po4(i,j,k)
        cobalt%jpo4h(i,j,k) = cobalt%jpo4(i,j,k) * dzt(i,j,k)
-       cobalt%p_po4(i,j,k,tau) = cobalt%p_po4(i,j,k,tau) + &
-              (cobalt%jpo4(i,j,k)+cobalt%jpo4_iceberg(i,j,k)) * dt * grid_tmask(i,j,k)
-       !
        ! SiO4
-       !
        cobalt%jsio4(i,j,k) = cobalt%jprod_sio4(i,j,k) - phyto(LARGE)%juptake_sio4(i,j,k) - &
                              phyto(MEDIUM)%juptake_sio4(i,j,k)
        cobalt%jsio4h(i,j,k) = cobalt%jsio4(i,j,k) * dzt(i,j,k)
-       cobalt%p_sio4(i,j,k,tau) = cobalt%p_sio4(i,j,k,tau) + cobalt%jsio4(i,j,k) * dt * grid_tmask(i,j,k)
-    enddo; enddo ; enddo  !} i,j,k
-
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
        ! Fed
-       !
        cobalt%jfed(i,j,k) = cobalt%jprod_fed(i,j,k) + cobalt%jfe_coast(i,j,k) + &
                             cobalt%jfe_iceberg(i,j,k) - phyto(DIAZO)%juptake_fe(i,j,k) - &
                             phyto(LARGE)%juptake_fe(i,j,k) - phyto(MEDIUM)%juptake_fe(i,j,k) - &
                             phyto(SMALL)%juptake_fe(i,j,k) - cobalt%jfe_ads(i,j,k)
+       ! apply (fused on GPU via p_* pointer mapping; iceberg terms are mapped to device)
+       cobalt%p_no3(i,j,k,tau) = cobalt%p_no3(i,j,k,tau) + &
+               (cobalt%jno3(i,j,k)+cobalt%jno3_iceberg(i,j,k))*dt*grid_tmask(i,j,k)
+       cobalt%p_nh4(i,j,k,tau) = cobalt%p_nh4(i,j,k,tau) + cobalt%jnh4(i,j,k) * dt * grid_tmask(i,j,k)
+       cobalt%p_po4(i,j,k,tau) = cobalt%p_po4(i,j,k,tau) + &
+              (cobalt%jpo4(i,j,k)+cobalt%jpo4_iceberg(i,j,k)) * dt * grid_tmask(i,j,k)
+       cobalt%p_sio4(i,j,k,tau) = cobalt%p_sio4(i,j,k,tau) + cobalt%jsio4(i,j,k) * dt * grid_tmask(i,j,k)
        cobalt%p_fed(i,j,k,tau) = cobalt%p_fed(i,j,k,tau) + cobalt%jfed(i,j,k) * dt * grid_tmask(i,j,k)
-    enddo; enddo; enddo  !} i,j,k
-
+    enddo; enddo ; enddo  !} i,j,k
+    !$omp target exit data map(from: cobalt%jno3,cobalt%jno3h,cobalt%jnh4,cobalt%jnh4h,cobalt%jpo4,cobalt%jpo4h, &
+    !$omp&   cobalt%jsio4,cobalt%jsio4h,cobalt%jfed)
+    !$omp target exit data map(from: cobalt%p_no3,cobalt%p_nh4,cobalt%p_po4,cobalt%p_sio4,cobalt%p_fed)
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(delete: phyto(n)%juptake_no3,phyto(n)%juptake_nh4,phyto(n)%juptake_po4, &
+      !$omp&   phyto(n)%juptake_sio4,phyto(n)%juptake_fe)
+    enddo
+    !$omp target exit data map(delete: cobalt%jprod_no3nitrif,cobalt%jno3denit_wc,cobalt%juptake_no3amx,cobalt%jprod_nh4, &
+    !$omp&   cobalt%juptake_nh4nitrif,cobalt%juptake_nh4amx,cobalt%jprod_po4,cobalt%jprod_sio4,cobalt%jprod_fed, &
+    !$omp&   cobalt%jfe_coast,cobalt%jfe_iceberg,cobalt%jfe_ads,cobalt%jno3_iceberg,cobalt%jpo4_iceberg,dzt)
+    !$omp target exit data map(delete: cobalt, phyto)
     call mpp_clock_end(id_clock_source_sink_loop5)
     !
     !-----------------------------------------------------------------------
@@ -5977,110 +6050,78 @@ contains
     !-----------------------------------------------------------------------
     !
     call mpp_clock_begin(id_clock_source_sink_loop6)
+    ! === GPU §3 source/sink loop6 (detritus/DOM/O2/carbon): COMPUTE/APPLY SPLIT, own resident scope. The 5 original
+    !     do-blocks fuse into ONE compute kernel; the 18 p_X applies run on the HOST. jprod_fedet is an UPSTREAM
+    !     accumulator (+= jfe_ads reads its foodweb value) -> mapped to:+from: (NOT alloc:); jo2 is fresh-in-kernel
+    !     -> alloc:. Compute arithmetic is verbatim (loop split only) -> CPU bit-identical; GPU within-band.
+    !     The do_14c radiocarbon block below (incl. the columnar fpo14c k-recurrence) stays on CPU. ===
+    !$omp target enter data map(to: cobalt, phyto, bact, dzt)
+    !$omp target enter data map(to: cobalt%det_jhploss_fe,cobalt%det_jhploss_n,cobalt%det_jhploss_p,cobalt%det_jhploss_si, &
+    !$omp&   cobalt%det_jzloss_fe,cobalt%det_jzloss_n,cobalt%det_jzloss_p,cobalt%det_jzloss_si,cobalt%expkT, &
+    !$omp&   cobalt%f_sldon,cobalt%f_sldop,cobalt%f_srdon,cobalt%f_srdop,cobalt%jdic_caco3_nerbur, &
+    !$omp&   cobalt%jdiss_cadet_arag,cobalt%jdiss_cadet_calc,cobalt%jdiss_sidet,cobalt%jfe_ads,cobalt%jno3denit_wc, &
+    !$omp&   cobalt%jo2resp_wc,cobalt%jprod_cadet_arag,cobalt%jprod_cadet_calc,cobalt%jprod_ldon,cobalt%jprod_ldop, &
+    !$omp&   cobalt%jprod_lithdet,cobalt%jprod_ndet,cobalt%jprod_ndet_fast,cobalt%jprod_nh4,cobalt%jprod_pdet, &
+    !$omp&   cobalt%jprod_pdet_fast,cobalt%jprod_sidet,cobalt%jprod_sldon,cobalt%jprod_sldop,cobalt%jprod_srdon, &
+    !$omp&   cobalt%jprod_srdop,cobalt%jremin_fedet,cobalt%jremin_ndet,cobalt%jremin_ndet_fast,cobalt%jremin_pdet, &
+    !$omp&   cobalt%jremin_pdet_fast,cobalt%juptake_nh4amx,cobalt%juptake_nh4nitrif,cobalt%jprod_fedet)
+    do n = 1,NUM_PHYTO
+      !$omp target enter data map(to: phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3)
+    enddo
+    !$omp target enter data map(to: bact(1)%juptake_ldon,bact(1)%juptake_ldop)
+    !$omp target enter data map(alloc: cobalt%jcadet_arag,cobalt%jcadet_calc,cobalt%jlithdet,cobalt%jndet, &
+    !$omp&   cobalt%jndet_fast,cobalt%jndeth,cobalt%jpdet,cobalt%jpdet_fast,cobalt%jsidet,cobalt%jfedet, &
+    !$omp&   cobalt%jldon,cobalt%jldop,cobalt%jsldon,cobalt%jsldop,cobalt%jsrdon,cobalt%jsrdop,cobalt%jo2, &
+    !$omp&   cobalt%jo2h,cobalt%jalk,cobalt%jalkh,cobalt%jdic,cobalt%jdich)
+    !$omp target enter data map(to: cobalt%p_cadet_arag,cobalt%p_cadet_calc,cobalt%p_lithdet,cobalt%p_ndet, &
+    !$omp&   cobalt%p_ndet_fast,cobalt%p_pdet,cobalt%p_pdet_fast,cobalt%p_sidet,cobalt%p_fedet,cobalt%p_ldon, &
+    !$omp&   cobalt%p_ldop,cobalt%p_sldon,cobalt%p_sldop,cobalt%p_srdon,cobalt%p_srdop,cobalt%p_o2,cobalt%p_alk, &
+    !$omp&   cobalt%p_dic)
+    !$omp target teams loop collapse(3)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
        ! Cadet_arag
-       !
        cobalt%jcadet_arag(i,j,k) = cobalt%jprod_cadet_arag(i,j,k) - cobalt%jdiss_cadet_arag(i,j,k)
-       cobalt%p_cadet_arag(i,j,k,tau) = cobalt%p_cadet_arag(i,j,k,tau) + cobalt%jcadet_arag(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Cadet_calc
-       !
        cobalt%jcadet_calc(i,j,k) = cobalt%jprod_cadet_calc(i,j,k) - cobalt%jdiss_cadet_calc(i,j,k)
-       cobalt%p_cadet_calc(i,j,k,tau) = cobalt%p_cadet_calc(i,j,k,tau) + cobalt%jcadet_calc(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Lithdet
-       !
        cobalt%jlithdet(i,j,k) = cobalt%jprod_lithdet(i,j,k)
-       cobalt%p_lithdet(i,j,k,tau) = cobalt%p_lithdet(i,j,k,tau) + cobalt%jlithdet(i,j,k) * dt *  &
-                                     grid_tmask(i,j,k)
-       !
        ! Ndet
-       !
        cobalt%jndet(i,j,k) = cobalt%jprod_ndet(i,j,k) - cobalt%jremin_ndet(i,j,k) - &
                              cobalt%det_jzloss_n(i,j,k) - cobalt%det_jhploss_n(i,j,k)
        cobalt%jndet_fast(i,j,k) = cobalt%jprod_ndet_fast(i,j,k) - cobalt%jremin_ndet_fast(i,j,k)
        cobalt%jndeth(i,j,k) = cobalt%jndet(i,j,k) * dzt(i,j,k)
-       cobalt%p_ndet(i,j,k,tau) = cobalt%p_ndet(i,j,k,tau) + cobalt%jndet(i,j,k)*dt*grid_tmask(i,j,k)
-       cobalt%p_ndet_fast(i,j,k,tau) = cobalt%p_ndet_fast(i,j,k,tau) + cobalt%jndet_fast(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Pdet
-       !
        cobalt%jpdet(i,j,k) = cobalt%jprod_pdet(i,j,k) - cobalt%jremin_pdet(i,j,k) - &
                              cobalt%det_jzloss_p(i,j,k) - cobalt%det_jhploss_p(i,j,k)
        cobalt%jpdet_fast(i,j,k) = cobalt%jprod_pdet_fast(i,j,k) - cobalt%jremin_pdet_fast(i,j,k)
-       cobalt%p_pdet(i,j,k,tau) = cobalt%p_pdet(i,j,k,tau) + cobalt%jpdet(i,j,k)*dt*grid_tmask(i,j,k)
-       cobalt%p_pdet_fast(i,j,k,tau) = cobalt%p_pdet_fast(i,j,k,tau) + cobalt%jpdet_fast(i,j,k)*dt*grid_tmask(i,j,k)
-       !
        ! Sidet
-       !
        cobalt%jsidet(i,j,k) = cobalt%jprod_sidet(i,j,k) - &
                               cobalt%jdiss_sidet(i,j,k) - cobalt%det_jzloss_si(i,j,k) - &
                               cobalt%det_jhploss_si(i,j,k)
-       cobalt%p_sidet(i,j,k,tau) = cobalt%p_sidet(i,j,k,tau) + cobalt%jsidet(i,j,k)*dt*grid_tmask(i,j,k)
-    enddo; enddo ; enddo  !} i,j,k
-
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
-       ! Fedet
-       !
+       ! Fedet (jprod_fedet is an upstream accumulator: += jfe_ads)
        cobalt%jprod_fedet(i,j,k) = cobalt%jprod_fedet(i,j,k) + cobalt%jfe_ads(i,j,k)
        cobalt%jfedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - &
                               cobalt%jremin_fedet(i,j,k) - cobalt%det_jzloss_fe(i,j,k) - &
                               cobalt%det_jhploss_fe(i,j,k)
-       cobalt%p_fedet(i,j,k,tau) = cobalt%p_fedet(i,j,k,tau) + cobalt%jfedet(i,j,k)*dt*grid_tmask(i,j,k)
-    enddo; enddo; enddo  !} i,j,k
-    !
-    !     Dissolved Organic Matter
-    !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
        ! Labile Dissolved Organic Nitrogen
-       !
        cobalt%jldon(i,j,k) = cobalt%jprod_ldon(i,j,k) + &
                              cobalt%gamma_sldon*cobalt%expkT(i,j,k)*cobalt%f_sldon(i,j,k) + &
                              cobalt%gamma_srdon*cobalt%f_srdon(i,j,k) - bact(1)%juptake_ldon(i,j,k)
-       cobalt%p_ldon(i,j,k,tau) = cobalt%p_ldon(i,j,k,tau) +  cobalt%jldon(i,j,k)*dt*               &
-            grid_tmask(i,j,k)
-       !
        ! Labile Dissolved Organic Phosphorous
-       !
        cobalt%jldop(i,j,k) = cobalt%jprod_ldop(i,j,k) + &
                              cobalt%gamma_sldop*cobalt%expkT(i,j,k)*cobalt%f_sldop(i,j,k) + &
                              cobalt%gamma_srdop*cobalt%f_srdop(i,j,k) - bact(1)%juptake_ldop(i,j,k)
-       cobalt%p_ldop(i,j,k,tau) = cobalt%p_ldop(i,j,k,tau) +  cobalt%jldop(i,j,k)*dt*               &
-                             grid_tmask(i,j,k)
-       !
        ! Semilabile Dissolved Organic Nitrogen
-       !
        cobalt%jsldon(i,j,k) = cobalt%jprod_sldon(i,j,k) - &
                               cobalt%gamma_sldon*cobalt%expkT(i,j,k)*cobalt%f_sldon(i,j,k)
-       cobalt%p_sldon(i,j,k,tau) = cobalt%p_sldon(i,j,k,tau) +  cobalt%jsldon(i,j,k) * dt *               &
-            grid_tmask(i,j,k)
-       !
        ! Semilabile dissolved organic phosphorous
-       !
        cobalt%jsldop(i,j,k) = cobalt%jprod_sldop(i,j,k) - &
                               cobalt%gamma_sldop*cobalt%expkT(i,j,k)*cobalt%f_sldop(i,j,k)
-       cobalt%p_sldop(i,j,k,tau) = cobalt%p_sldop(i,j,k,tau) + cobalt%jsldop(i,j,k) * dt *                &
-                                  grid_tmask(i,j,k)
-       !
        ! Refractory Dissolved Organic Nitrogen
-       !
        cobalt%jsrdon(i,j,k) = cobalt%jprod_srdon(i,j,k) -  cobalt%gamma_srdon * cobalt%f_srdon(i,j,k)
-       cobalt%p_srdon(i,j,k,tau) = cobalt%p_srdon(i,j,k,tau) +  cobalt%jsrdon(i,j,k) * dt *               &
-            grid_tmask(i,j,k)
-       !
        ! Refractory dissolved organic phosphorous
-       !
        cobalt%jsrdop(i,j,k) = cobalt%jprod_srdop(i,j,k) - cobalt%gamma_srdop * cobalt%f_srdop(i,j,k)
-       cobalt%p_srdop(i,j,k,tau) = cobalt%p_srdop(i,j,k,tau) + cobalt%jsrdop(i,j,k) * dt *                &
-                                  grid_tmask(i,j,k)
-    enddo; enddo ; enddo  !} i,j,k
-    !
-    !     O2
-    !
-    do k = 1, nk ; do j =jsc, jec ; do i = isc, iec  !{
+       ! O2 (jo2 is fresh: computed here, then self-subtract jo2resp_wc -> alloc:, not upstream)
        cobalt%jo2(i,j,k) = (cobalt%o2_2_no3 * (phyto(DIAZO)%juptake_no3(i,j,k) +   &
             phyto(LARGE)%juptake_no3(i,j,k) + phyto(MEDIUM)%juptake_no3(i,j,k) + &
             phyto(SMALL)%juptake_no3(i,j,k)) + cobalt%o2_2_nh4 *       &
@@ -6089,20 +6130,7 @@ contains
             cobalt%o2_2_nfix*phyto(DIAZO)%juptake_n2(i,j,k)) * grid_tmask(i,j,k)
        cobalt%jo2(i,j,k) = cobalt%jo2(i,j,k) - cobalt%jo2resp_wc(i,j,k)
        cobalt%jo2h(i,j,k) = cobalt%jo2(i,j,k) * dzt(i,j,k)
-       cobalt%p_o2(i,j,k,tau) = cobalt%p_o2(i,j,k,tau) + cobalt%jo2(i,j,k) * dt * grid_tmask(i,j,k)
-    enddo; enddo ; enddo  !} i,j,k
-    !
-    !     The Carbon system
-    !
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       !
        ! Alkalinity
-       ! CAS: remove o2 removal via nitrification from the total o2 respired
-       !      to isolate the change in alkalinity due to aerobic organic
-       !      matter remineralization
-       !
-       ! << Apply neritic CaCO3 burial contribution
-       ! This term is zero when neritic burial is turned off (default: jdic_caco3_nerbur = 0.0) >>
        cobalt%jalk(i,j,k) = 2.0 * (cobalt%jdiss_cadet_arag(i,j,k) +        &
           cobalt%jdiss_cadet_calc(i,j,k) - cobalt%jprod_cadet_arag(i,j,k) - &
           cobalt%jprod_cadet_calc(i,j,k) - cobalt%jdic_caco3_nerbur(i,j,k)) + &
@@ -6114,13 +6142,8 @@ contains
           phyto(DIAZO)%juptake_nh4(i,j,k) - phyto(LARGE)%juptake_nh4(i,j,k) - &
           phyto(MEDIUM)%juptake_nh4(i,j,k) - &
           phyto(SMALL)%juptake_nh4(i,j,k) - 2.0 * cobalt%juptake_nh4nitrif(i,j,k)
-
        cobalt%jalkh(i,j,k) = cobalt%jalk(i,j,k) * dzt(i,j,k)
-       cobalt%p_alk(i,j,k,tau) = cobalt%p_alk(i,j,k,tau) + cobalt%jalk(i,j,k) * dt * grid_tmask(i,j,k)
-       !
        ! Dissolved Inorganic Carbon
-       !
-
        cobalt%jdic(i,j,k) =(cobalt%c_2_n * (cobalt%jprod_nh4(i,j,k) - &
           phyto(DIAZO)%juptake_no3(i,j,k) - phyto(LARGE)%juptake_no3(i,j,k) - &
           phyto(MEDIUM)%juptake_no3(i,j,k) - phyto(SMALL)%juptake_no3(i,j,k) - &
@@ -6131,8 +6154,48 @@ contains
           cobalt%jprod_cadet_arag(i,j,k) - cobalt%jprod_cadet_calc(i,j,k) - &
           cobalt%jdic_caco3_nerbur(i,j,k))
        cobalt%jdich(i,j,k) = cobalt%jdic(i,j,k) * dzt(i,j,k)
+       ! apply (fused on GPU via p_* pointer mapping)
+       cobalt%p_cadet_arag(i,j,k,tau) = cobalt%p_cadet_arag(i,j,k,tau) + cobalt%jcadet_arag(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_cadet_calc(i,j,k,tau) = cobalt%p_cadet_calc(i,j,k,tau) + cobalt%jcadet_calc(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_lithdet(i,j,k,tau) = cobalt%p_lithdet(i,j,k,tau) + cobalt%jlithdet(i,j,k) * dt * grid_tmask(i,j,k)
+       cobalt%p_ndet(i,j,k,tau) = cobalt%p_ndet(i,j,k,tau) + cobalt%jndet(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_ndet_fast(i,j,k,tau) = cobalt%p_ndet_fast(i,j,k,tau) + cobalt%jndet_fast(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_pdet(i,j,k,tau) = cobalt%p_pdet(i,j,k,tau) + cobalt%jpdet(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_pdet_fast(i,j,k,tau) = cobalt%p_pdet_fast(i,j,k,tau) + cobalt%jpdet_fast(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_sidet(i,j,k,tau) = cobalt%p_sidet(i,j,k,tau) + cobalt%jsidet(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_fedet(i,j,k,tau) = cobalt%p_fedet(i,j,k,tau) + cobalt%jfedet(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_ldon(i,j,k,tau) = cobalt%p_ldon(i,j,k,tau) + cobalt%jldon(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_ldop(i,j,k,tau) = cobalt%p_ldop(i,j,k,tau) + cobalt%jldop(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_sldon(i,j,k,tau) = cobalt%p_sldon(i,j,k,tau) + cobalt%jsldon(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_sldop(i,j,k,tau) = cobalt%p_sldop(i,j,k,tau) + cobalt%jsldop(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_srdon(i,j,k,tau) = cobalt%p_srdon(i,j,k,tau) + cobalt%jsrdon(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_srdop(i,j,k,tau) = cobalt%p_srdop(i,j,k,tau) + cobalt%jsrdop(i,j,k)*dt*grid_tmask(i,j,k)
+       cobalt%p_o2(i,j,k,tau) = cobalt%p_o2(i,j,k,tau) + cobalt%jo2(i,j,k) * dt * grid_tmask(i,j,k)
+       cobalt%p_alk(i,j,k,tau) = cobalt%p_alk(i,j,k,tau) + cobalt%jalk(i,j,k) * dt * grid_tmask(i,j,k)
        cobalt%p_dic(i,j,k,tau) = cobalt%p_dic(i,j,k,tau) + cobalt%jdic(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo !} i,j,k
+    !$omp target exit data map(from: cobalt%jcadet_arag,cobalt%jcadet_calc,cobalt%jlithdet,cobalt%jndet, &
+    !$omp&   cobalt%jndet_fast,cobalt%jndeth,cobalt%jpdet,cobalt%jpdet_fast,cobalt%jsidet,cobalt%jfedet, &
+    !$omp&   cobalt%jldon,cobalt%jldop,cobalt%jsldon,cobalt%jsldop,cobalt%jsrdon,cobalt%jsrdop,cobalt%jo2, &
+    !$omp&   cobalt%jo2h,cobalt%jalk,cobalt%jalkh,cobalt%jdic,cobalt%jdich,cobalt%jprod_fedet)
+    !$omp target exit data map(from: cobalt%p_cadet_arag,cobalt%p_cadet_calc,cobalt%p_lithdet,cobalt%p_ndet, &
+    !$omp&   cobalt%p_ndet_fast,cobalt%p_pdet,cobalt%p_pdet_fast,cobalt%p_sidet,cobalt%p_fedet,cobalt%p_ldon, &
+    !$omp&   cobalt%p_ldop,cobalt%p_sldon,cobalt%p_sldop,cobalt%p_srdon,cobalt%p_srdop,cobalt%p_o2,cobalt%p_alk, &
+    !$omp&   cobalt%p_dic)
+    do n = 1,NUM_PHYTO
+      !$omp target exit data map(delete: phyto(n)%juptake_n2,phyto(n)%juptake_nh4,phyto(n)%juptake_no3)
+    enddo
+    !$omp target exit data map(delete: bact(1)%juptake_ldon,bact(1)%juptake_ldop)
+    !$omp target exit data map(delete: cobalt%det_jhploss_fe,cobalt%det_jhploss_n,cobalt%det_jhploss_p,cobalt%det_jhploss_si, &
+    !$omp&   cobalt%det_jzloss_fe,cobalt%det_jzloss_n,cobalt%det_jzloss_p,cobalt%det_jzloss_si,cobalt%expkT, &
+    !$omp&   cobalt%f_sldon,cobalt%f_sldop,cobalt%f_srdon,cobalt%f_srdop,cobalt%jdic_caco3_nerbur, &
+    !$omp&   cobalt%jdiss_cadet_arag,cobalt%jdiss_cadet_calc,cobalt%jdiss_sidet,cobalt%jfe_ads,cobalt%jno3denit_wc, &
+    !$omp&   cobalt%jo2resp_wc,cobalt%jprod_cadet_arag,cobalt%jprod_cadet_calc,cobalt%jprod_ldon,cobalt%jprod_ldop, &
+    !$omp&   cobalt%jprod_lithdet,cobalt%jprod_ndet,cobalt%jprod_ndet_fast,cobalt%jprod_nh4,cobalt%jprod_pdet, &
+    !$omp&   cobalt%jprod_pdet_fast,cobalt%jprod_sidet,cobalt%jprod_sldon,cobalt%jprod_sldop,cobalt%jprod_srdon, &
+    !$omp&   cobalt%jprod_srdop,cobalt%jremin_fedet,cobalt%jremin_ndet,cobalt%jremin_ndet_fast,cobalt%jremin_pdet, &
+    !$omp&   cobalt%jremin_pdet_fast,cobalt%juptake_nh4amx,cobalt%juptake_nh4nitrif,dzt)
+    !$omp target exit data map(delete: cobalt, phyto, bact)
 !
 
     if (do_14c) then                                        !<<RADIOCARBON
