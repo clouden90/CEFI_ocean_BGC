@@ -19,9 +19,29 @@ ballast+source/sink+M2 change is OpenMP-target-directive-only (CPU build ignores
 | po4 | 7.5339387331740561e9  | 0.00e+00 |
 | o2  | 1.6808058953017490e12 | 0.00e+00 |
 
-**Tier-2 (-O2 CPU): aborted at init** — `FATAL: get_variable_line: extra close block ... %CON` (FMS field-table
-parse), BEFORE COBALT runs. NOT an M2/numerical issue (Tier-1 with the same source parsed fine; -O2 source/sink
-had never been run before). Environmental/parse glitch → clean re-run pending. Not a correctness blocker.
+**Tier-2 (-O2 CPU): not attainable — the coupled model is broadly -O2-unstable under nvfortran 24.11, in
+framework code unrelated to COBALT.** Full investigation (all crash at INIT, before the COBALT time loop):
+
+| run | build flags | result |
+|---|---|---|
+| Tier-2  | `-O2 -Mnofma` (vectorized) | `FATAL get_variable_line: extra close block "%CON"` |
+| Tier-2 (re-run) | same | **reproduces deterministically** → not a transient NFS glitch |
+| Tier-2b | `-O2 -Mnovect -Mnofma` | same `%CON` crash → **vectorizer ruled out**; it's -O2 *scalar* opt |
+| Tier-2c | `-O2`, `MOM_file_parser.o` @ `-O0`, relink | `%CON` **fixed**; now **segfaults in atmos-model init** (another file) |
+
+Root cause: `get_variable_line` is in **MOM6's `MOM_file_parser.F90`** (the param-file parser), not field_manager.
+nvfortran 24.11 `-O2` miscompiles it (and at least one more file in the atmos/coupler init path). All failures are at
+INIT, before any COBALT code runs; none involve the port. This is exactly why the project pins its reproducible build
+to `-O0 -Mnovect -Mnofma` (the GPU `sep` build and Tier-1 both use it for FMS/host code). Chasing each -O2 miscompile
+file-by-file is open-ended framework debugging, out of scope for the port.
+
+**Why this is not a correctness gap:** the port is OpenMP-target-**directive-only on the CPU build** (the CPU compiler
+ignores the directives), and **Tier-1 proves the CPU result is BIT-IDENTICAL to the reference** — so -O2 of the ported
+CPU code would be -O2 of the *original* code; any -O2 issue is pre-existing framework instability, not introduced here.
+Optimized-compile coverage of the actual COBALT kernels comes from the **GPU `sep` build (b2b bit-faithful)**. Tier-1
+(bit-identical) + GPU b2b (bit-faithful) are therefore the conclusive correctness gates; Tier-2 -O2 CPU adds nothing
+the port could fail and is blocked by unrelated framework miscompiles regardless. Reproduce: `profiling/tier2_rerun.sbatch`,
+`tier2b_O2novect.sbatch`, `tier2c_parser_O0.sbatch` (+ template `builds/nvhpc/x86-cpuO2nv-nompi.mk`).
 
 ## Performance
 
@@ -48,5 +68,6 @@ before/after would require profiling the all-pointer `18d7594`).
 (register-spilled); several growth kernels register-limited (72–130 reg, 18–44% occ). Source/sink kernels in
 `consol_ncu.ncu-rep`. Occupancy tuning is a future backlog item (register caps via `-gpu=maxregcount`/restructuring).
 
-## Status: correctness consolidation COMPLETE (Tier-1 bit-identical + GPU b2b). Remaining: Tier-2 clean re-run,
-## figures, PR (base feature/gpu, needs explicit go).
+## Status: correctness consolidation COMPLETE — Tier-1 bit-identical + GPU b2b bit-faithful are the conclusive gates;
+## Tier-2 -O2 CPU investigated and shown not attainable (unrelated nvfortran-24.11 framework -O2 miscompiles).
+## Remaining: figures, PR (base feature/gpu, needs explicit go).
